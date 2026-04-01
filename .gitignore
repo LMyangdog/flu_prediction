@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# VS Code
+.vscode/
+
+# Project Specific - Large Files
+# 建议：大型数据集和模型权重通常不提交到 Git，或者使用 Git LFS
+data/raw/
+data/processed/
+data/splits/*.npy
+data/splits/*.csv
+checkpoints/*.pt
+
+# Results
+results/logs/
+results/figures/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,176 @@
+
+中国海洋大学
+本 科 毕 业 设 计
+
+
+开题报告
+
+
+
+
+
+题    目 基于深度学习和多元数据的流感爆发趋势预测 
+院、  系             信息科学与工程学部           
+专    业          计算机科学与技术2022级         
+学生姓名                   张宇鑫                 
+学    号                22090032057               
+指导教师                   刘艳艳                 
+        
+
+
+
+             教务处制表
+          2026年   月   日
+一、选题依据
+
+
+
+
+二、文献综述
+
+
+
+
+
+
+
+
+
+
+
+
+
+三、研究内容
+四、论文（设计）进度安排
+
+五、审核意见
+注：1、表格不够可加附页。
+2、审核小组应至少由三位具有高级职称的教师组成；必要时可召集开题报告会。
+课题来源、选题依据和背景情况；课题研究目的、学术价值或实际应用价值
+课题来源：
+自拟课题
+
+选题依据：
+流感等呼吸道传染病的爆发具有复杂的非线性动态特征，受气象条件、人群流动及公众防范意识等多种外在因素的综合影响 。传统的预测模型（如ARIMA、SIR动力学模型、多元线性回归、SVM等）在处理此类多源异构数据时存在线性假设局限，往往精度不足且容易出现预测滞后 。而在早期深度学习领域被广泛使用的RNN/LSTM模型，在面对维度差异极大的多元数据时也常遭遇串行计算缓慢和长程梯度衰减的瓶颈。为了突破这些限制，引入当前时序预测领域最前沿的 iTransformer 架构，通过其创新的通道独立机制（Channel Independence）来高效提取并融合多源异构数据，成为提升流感预测精度与实时性的最佳路径。
+背景情况：
+准确预测流感趋势对公共卫生预警体系具有重要意义 。传统的流感监测主要依赖医疗机构上报的流感样病例（ILI）数据，这种被动监测模式通常存在1-2周的时间滞后，难以满足传染病早期预警的需求 。当前信息化环境下，除了流行病学数据，我们还可获取丰富的气象数据和网络搜索关键词等具有前瞻性的上下文特征数据，这为利用前沿深度学习技术进行多变量融合趋势推演提供了坚实的数据基础 。
+课题研究目的：
+基于Python构建一个融合多源数据（包括历史流感样病例数据、气象数据、网络搜索关键词数据等）的流感爆发趋势预测模型 。本项目使用前沿的 iTransformer 网络替换传统的LSTM，旨在通过挖掘不同异构变量间的跨维度深层关联，直观展示流感爆发趋势及峰值，有效解决传统预测中的时间滞后问题。
+学术价值：
+探索最新的倒置Transformer（iTransformer）网络结构在时间序列分析及公共卫生领域的交叉应用 。深入探讨通道独立机制下，文本搜索指数、数值型气象参数与流行病学统计数据的高效对齐与特征提取方式，为多源异构流行病数据的融合提供创新性的实验与理论参考 。
+实际应用价值：
+为公共卫生疾控部门提供更为精准的流感爆发预警工具，通过对流感高峰期和非高峰期的准确预测 ，辅助医疗资源的合理调配与疾病防控决策。
+
+---ROW---
+===TABLE===
+国内外研究现状、发展动态；查阅的主要文献
+国内外研究现状、发展动态：
+在传染病预测与时间序列分析领域，模型的发展经历了从传统统计模型到浅层机器学习，再到深度学习与前沿多源数据融合的演变过程 。通过文献调研，当前国内外的研究现状及类似系统所用算法的优缺点对比主要体现在以下三个阶段：
+1. 传统统计模型与浅层神经网络的局限性 早期流行病和时序预测主要采用ARIMA模型、经典的SIR动力学模型以及多元线性回归等 。这些模型的优点是理论基础扎实、计算成本低 。然而，张景阳等人的对比研究指出，多元线性回归等传统方法在拟合非线性序列时误差较大，BP神经网络等浅层模型也极易陷入局部最优 。此外，支持向量机（SVM）等模型在处理类似“气象参数与文本搜索指数混合”的多源异构特征时，高度依赖人工特征工程，且难以捕捉长距离的时间序列依赖关系，面对突发性流感高峰往往表现出明显的预测滞后性 。
+2. 基于LSTM等早期深度学习模型的崛起与瓶颈 近年来，深度学习技术在复杂时间序列预测中的优势日益凸显 。梁宏涛、郝建华等人的研究综述均肯定了深度学习在时序预测领域的革命性地位 。其中，带有门控机制的循环神经网络（RNN及其变种如LSTM、GRU）曾是绝对的主流。例如，杨青、孙瑞奇等人分别利用LSTM网络成功构建了全球股票指数和美股价格的趋势预测模型，证明了其处理时序依赖的卓越能力 。但在后续的实际应用中暴露出两大缺点：一是序列化的计算机制导致长时序训练极为缓慢；二是在强行将同一时间步的异质特征（如同时输入温度、搜索指数和病例数）绑定拼接时，容易产生变量间的噪声干扰。
+3. Transformer架构与通道独立前沿机制的广泛应用 随着注意力机制（Attention）的快速发展 ，基于Transformer架构的时间序列预测方法逐渐占据核心地位 。陈嘉俊等学者的综述详细归纳了该类方法在捕获全局相关性上的绝对优势 。当前该领域最主流的发展动态是探索面向多变量长时序预测（M-LTSF）的全新架构设计 。在这其中，创新性的 iTransformer 架构脱颖而出。Siqiao Zhao 等人的最新研究表明，iTransformer 在构建对冲基金投资组合等多变量复杂预测场景中表现优异 。其核心技术优势在于打破了传统时间步对齐的束缚，采用了“通道独立（Channel-Independent）”的思想（Donghwa Shin等人亦强调了跨变量独立嵌入增强技术的价值） ，即将单一变量的完整时间序列作为独立的Token，有效规避了异构特征间的相互干扰。结合 WeatherFormer 等网络在气象特征表征上的成功应用经验 ，本研究采用类似 iTransformer 的倒置自注意力架构来融合流感病例、气象条件及网络搜索指数等多源特征，是克服传统模型滞后性与特征融合瓶颈的最前沿解决方案 。
+
+参考文献：
+1. 杨真真;徐奕;万成业;杨永鹏 《融合多尺度频域适配器和双路注意力的时序预测》 2026.03
+2. 任欢;王旭光 《注意力机制综述》2021.01
+3. 梁宏涛;刘硕;杜军威;胡强;于旭 《深度学习应用于时序预测研究综述》 2023.03
+4. 郝建华 《基于深度学习的时间序列预测算法研究》 2024.12
+5. 李文;邓升;段妍;杜守国 《时间序列预测与深度学习:文献综述与应用实例》2020.10
+6. 陈嘉俊;刘波;林伟伟;郑剑文;谢家晨 	《基于Transformer的时间序列预测方法综述》2024.10
+7. 周明升;韩冬梅 《基于社交媒体用户评论和关注度的电影票房预测模型》2014.09
+8. 杨青;王晨蔚 《基于深度学习LSTM神经网络的全球股票指数预测研究》2019.03
+9. 孙瑞奇 《基于LSTM神经网络的美股股指价格趋势预测模型的研究》2015.12
+10. 张景阳;潘光友 《多元线性回归与BP神经网络预测模型对比与运用研究》2013.12
+11. Nabeel Ahmad Saidd  “A Controlled Comparison of Deep Learning Architectures for Multi-Horizon Financial Forecasting: Evidence from 918 Experiments” 2026.02
+12. Adib Hasan, Mardavij Roozbehani, Munther Dahleh  “WeatherFormer: A Pretrained Encoder Model for Learning Robust Weather Representations from Small Datasets” 2024.05
+13. Yisong Fu, Zezhi Shao, Chengqing Yu, Yujie Li, Zhulin An, Qi Wang, Yongjun Xu, Fei Wang “Selective Learning for Deep Time Series Forecasting” 2025.10
+14. Nick Janssen, Melanie Schaller, Bodo Rosenhahn “Benchmarking M-LTSF: Frequency and Noise-Based Evaluation of Multivariate Long Time Series Forecasting Models” 2026.03
+15. Siqiao Zhao, Zhikang Dong, Zeyu Cao, Raphael Douady “Hedge Fund Portfolio Construction Using PolyModel Theory and iTransformer” 2025.02
+16. Hailong Shu, Weiwei Song, Yue Wang, Jiping Zhang “WaveHiTS: Wavelet-Enhanced Hierarchical Time Series Modeling for Wind Direction Nowcasting in Eastern Inner Mongolia” 2025.04
+17. Dongyuan Li, Shun Zheng, Chang Xu, Jiang Bian, Renhe Jiang “Routing Channel-Patch Dependencies in Time Series Forecasting with Graph Spectral Decomposition” 2026.3
+18. Shuang Liang, Chaochuan Hou, Xu Yao, Shiping Wang, Minqi Jiang, Songqiao Han, Hailiang Huang “TSGym: Design Choices for Deep Multivariate Time-Series Forecasting” 2025.11
+19. Bing Fan, Shusen Ma, Yun-Bo Zhao, Yu Kang DC-Mamber: A Dual Channel Prediction Model based on Mamba and Linear Transformer for Multivariate Time Series Forecasting 2025.07
+20. Donghwa Shin, Edwin Zhang “Enhancing Channel-Independent Time Series Forecasting via Cross-Variate Patch Embedding” 2025.05
+
+---ROW---
+===TABLE===
+学术构想与思路；主要研究内容及拟解决的关键问题（或技术）
+学术构想与思路：
+整体构思为利用最新的 iTransformer 架构克服传统模型与基础RNN网络在处理非线性和多源异构数据时的精度瓶颈 。具体流程包括：从国家流感中心、气象局及互联网平台获取历史流感监测数据、气象数据（温湿度）和关键词搜索指数；清洗去噪后，不再将多元变量在同一时间步强制组合，而是利用 iTransformer 的通道独立机制，将单一变量的完整序列独立处理；最终通过其倒置自注意力机制重构异质变量间的影响权重，实现流感趋势的高精度预测与可视化。
+
+主要研究内容：
+整体构思为利用最新的 iTransformer 架构克服传统模型与基础RNN网络在处理非线性和多源异构数据时的精度瓶颈。具体流程包括：从国家流感中心、气象局及互联网平台获取历史流感监测数据、气象数据（温湿度）和关键词搜索指数;清洗去噪后,不再将多元变量在同一时间步强制组合，而是利用 iTransformer 的通道独立机制，将单一变量的完整序列独立处理；最终通过其倒置自注意力机制重构异质变量间的影响权重，实现流感趋势的高精度预测与可视化。
+
+拟解决的关键问题：
+跨维度多源异构数据（监测数据、数值气象数据、文本衍生搜索数据）的时空对齐、清洗与融合机制构建。
+如何根据流感数据的强季节性特征及复杂时间依赖性，定制化调整 iTransformer 的通道编码与注意力权重参数，构建适配该场景的最优网络结构 。
+
+拟采取的研究方法、技术路线、实施方案及可行性分析：
+研究方法：采用文献查阅法深度剖析传统时序算法的局限性；采用定量分析法进行多源数据的数据清洗与因果相关性分析；采用实验对比法验证新模型的有效性并进行超参数调优。
+
+技术路线：数据采集（获取流感、气象与舆情接口数据），数据预处理与重采样（使用Pandas、NumPy库），特征工程构建，基于PyTorch构建 iTransformer 核心架构，开展基准对比实验与模型调参，评价指标计算（RMSE, MAE等），可视化输出（Matplotlib绘制趋势图）。
+
+可行性分析：资料与数据可行性： 目前已初步确定了中国国家流感中心官网数据档案、气象局公开API接口及各大主流搜索引擎指数平台的数据获取渠道。
+
+技术可行性：熟练掌握Python编程语言及相关数据科学核心库（Pandas、NumPy）的使用方法。具备基于PyTorch底层API搭建并修改复杂深度学习架构的能力，并已在本地顺利部署PyCharm及对应的CUDA开发环境。
+理论可行性：前期已深入研读了最新的多变量时间序列预测文献，对注意力机制工作原理、反向传播与梯度下降策略有透彻理解，理论与文献储备充足。
+---ROW---
+===TABLE===
+起止时间
+主要内容
+预期目标
+---ROW---
+1月10日至2月25日
+需求分析、功能确认
+完成大致的架构设计
+---ROW---
+2月26日至4月1日
+项目开题、完成基本开发
+达到可以使用的水准
+---ROW---
+4月2日至4月15日
+最终润色、完成测试项目
+编写测试、实现较高预测效果
+---ROW---
+4月16日至5月5日
+论文撰写及审校
+完成论文及审校工作
+---ROW---
+5月6日至5月18日
+准备材料，进行论文答辩
+完善材料与论文答辩
+---ROW---
+===TABLE===
+导师意见
+
+
+
+
+
+
+
+
+
+
+导师签字:
+
+       年   月   日
+---ROW---
+审核小组意见
+
+
+
+
+
+
+
+
+
+
+
+
+审核小组成员签字：                                                  
+
+年    月    日
+---ROW---
+===TABLE===

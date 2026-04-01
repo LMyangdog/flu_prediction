@@ -1,0 +1,105 @@
+# ================================================================
+# 基于深度学习和多元数据的流感爆发趋势预测 — 全局配置
+# ================================================================
+
+# --- 数据配置 ---
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  splits_dir: "data/splits"
+  
+  # 时间窗口参数
+  lookback_window: 12          # 输入历史窗口（周数）
+  forecast_horizon: 4          # 预测未来周数
+  
+  # 数据集划分比例
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  
+  # 数据采集参数
+  start_year: 2018
+  end_year: 2025
+  target_city: "北京"
+
+# --- 特征列定义 ---
+features:
+  # 目标变量
+  target_col: "ili_rate"
+  
+  # 流感监测特征
+  flu_cols:
+    - "ili_rate"               # 流感样病例百分比
+    - "positive_rate"          # 病毒阳性率
+  
+  # 气象特征
+  weather_cols:
+    - "temperature"            # 平均温度 (°C)
+    - "humidity"               # 相对湿度 (%)
+    - "wind_speed"             # 风速 (m/s)
+    - "pressure"               # 气压 (hPa)
+  
+  # 搜索指数特征
+  search_cols:
+    - "flu_search_index"       # "流感" 搜索指数
+    - "cold_search_index"      # "感冒" 搜索指数
+    - "fever_search_index"     # "发烧" 搜索指数
+
+# --- iTransformer 模型配置 ---
+model:
+  itransformer:
+    d_model: 128               # 嵌入维度
+    n_heads: 8                 # 注意力头数
+    n_layers: 3                # Transformer 层数
+    d_ff: 256                  # 前馈网络维度
+    dropout: 0.1
+    activation: "gelu"
+  
+  # LSTM 基准模型配置
+  lstm:
+    hidden_dim: 128
+    num_layers: 2
+    dropout: 0.2
+    bidirectional: false
+  
+  # DLinear 基准模型配置
+  dlinear:
+    individual: true           # 通道独立
+
+# --- 训练配置 ---
+training:
+  epochs: 200
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  patience: 15                 # 早停耐心值
+  scheduler: "cosine"          # 学习率调度器: cosine / step / plateau
+  
+  # 优化器
+  optimizer: "adam"
+  
+  # 梯度裁剪
+  max_grad_norm: 1.0
+  
+  # 设备
+  device: "cuda"               # cuda / cpu
+  num_workers: 2
+  
+  # 保存路径
+  checkpoint_dir: "checkpoints"
+  log_dir: "results/logs"
+
+# --- 评估配置 ---
+evaluation:
+  metrics:
+    - "rmse"
+    - "mae"
+    - "mape"
+    - "r2"
+  figures_dir: "results/figures"
+
+# --- Web 配置 ---
+web:
+  host: "0.0.0.0"
+  port: 8501
+  title: "流感爆发趋势预测系统"

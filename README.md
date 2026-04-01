@@ -42,18 +42,26 @@ pip install -r requirements.txt
 
 ### 2. 训练模型
 
+本项目实现了**端到端的自动化全流程架构**。针对您的不同需求，提供两种训练方式：
+
+**方法一：全自动采集并训练（默认方式）**
+程序会自动从气象局、流感中心采集最新到今天的前瞻性数据，清洗并进行特征工程后开始深度学习。保证模型使用的是最新鲜的数据。
 ```bash
-# 快速验证（Debug 模式，5 epochs）
-python scripts/train.py --debug
-
-# 完整训练所有模型
+# 完整跑通一次最新数据（约需十几分钟）
 python scripts/train.py
+```
 
-# 仅训练 iTransformer
-python scripts/train.py --model iTransformer
-
-# 跳过数据采集（使用已有数据）
+**方法二：纯脱机本地训练（调试模型用，带 --skip-collect 参数）**
+如果您只想验证某几个超参数或是需要断网答辩，且本地已经有过 `data/processed/merged_dataset.csv` 时，加上跳过参数即可 1 秒钟跳过爬虫阶段直接炼丹：
+```bash
+# 纯本地断网高速训练
 python scripts/train.py --skip-collect
+
+# 如果你只想调参跑 5 个 Epoch 赶快看个响
+python scripts/train.py --debug --skip-collect
+
+# 如果你只想单独训练主角模型 iTransformer
+python scripts/train.py --model iTransformer --skip-collect
 ```
 
 ### 3. 启动 Web 仪表板
@@ -121,3 +129,6 @@ flu_prediction/
 - **Web**: Streamlit
 - **统计模型**: Statsmodels
 - **数据采集**: Requests, BeautifulSoup
+
+启动命令：
+C:/ProgramData/anaconda3/envs/ocean_torch/python.exe -m streamlit run d:/flu_prediction/web/app.py

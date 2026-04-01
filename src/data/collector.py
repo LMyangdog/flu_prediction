@@ -389,33 +389,7 @@ class SearchIndexCollector:
     
     def _fetch_from_google_trends(self, keywords: List[str], 
                                    start_date: str, end_date: str) -> Optional[pd.DataFrame]:
-        """通过 Google Trends 非官方 API 获取搜索趋势"""
-        try:
-            from pytrends.request import TrendReq
-            
-            pytrends = TrendReq(hl='zh-CN', tz=480)
-            
-            # Google Trends 需要分段获取长时间范围数据
-            timeframe = f"{start_date} {end_date}"
-            pytrends.build_payload(keywords, cat=0, timeframe=timeframe, geo='CN')
-            
-            df = pytrends.interest_over_time()
-            if df is not None and len(df) > 0:
-                df = df.reset_index()
-                df = df.rename(columns={
-                    'date': 'date',
-                    keywords[0]: 'flu_search_index',
-                    keywords[1]: 'cold_search_index' if len(keywords) > 1 else 'flu_search_index',
-                    keywords[2]: 'fever_search_index' if len(keywords) > 2 else 'flu_search_index',
-                })
-                if 'isPartial' in df.columns:
-                    df = df.drop('isPartial', axis=1)
-                return df
-        except ImportError:
-            print("[SearchIndexCollector] pytrends 未安装，跳过 Google Trends")
-        except Exception as e:
-            print(f"[SearchIndexCollector] Google Trends 异常: {e}")
-        
+        """通过 Google Trends 获取搜索趋势（已弃用，由于访问超时导致数据缺失大块白板）"""
         return None
     
     def _generate_realistic_data(self, keywords: List[str],

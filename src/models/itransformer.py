@@ -228,12 +228,12 @@ class iTransformer(nn.Module):
             for _ in range(n_layers)
         ])
         
-        # 3. 输出投影 — 从所有变量的嵌入投影到预测
+        # 3. 输出投影 — 独立抽取目标序列特征(索引为0)进行映射，防止多变量全连接层过拟合
         self.output_projection = nn.Sequential(
-            nn.Linear(d_model * num_variables, d_model),
+            nn.Linear(d_model, d_ff),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(d_model, forecast_horizon)
+            nn.Linear(d_ff, forecast_horizon)
         )
         
         # 初始化权重
@@ -262,10 +262,10 @@ class iTransformer(nn.Module):
         for layer in self.encoder_layers:
             tokens = layer(tokens)   # (B, C, D)
         
-        # Step 3: 展平所有变量的嵌入并投影
-        B = tokens.shape[0]
-        flat = tokens.reshape(B, -1)                    # (B, C*D)
-        predictions = self.output_projection(flat)       # (B, horizon)
+        # Step 3: 根据 iTransformer 论文机制，独立抽取目标变量（固定为特征列的第0位）投影
+        # 而不是把含有噪声的所有通道 (B, C*D) 全部展平
+        target_token = tokens[:, 0, :]                   # (B, D)
+        predictions = self.output_projection(target_token) # (B, horizon)
         
         return predictions
     

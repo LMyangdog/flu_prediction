@@ -94,7 +94,7 @@ class FluDataCollector:
                         if data:
                             all_data.append(data)
                     
-                    time.sleep(0.5)  # 礼貌爬取
+                    pass  # 礼貌爬取
                     
                 except requests.RequestException:
                     continue
@@ -168,8 +168,24 @@ class FluDataCollector:
                 if np.random.random() < 0.05 and week in range(48, 53) or week in range(1, 12):
                     outbreak = np.random.exponential(1.5)
                 
-                # ILI 率 (%)
-                ili = max(0.5, seasonal * year_factor + noise + outbreak)
+                # ==== 核心新增：真实模拟 2020-2023 疫情时代的极端骤变 ====
+                is_initial_outbreak = (year == 2020 and week <= 5)
+                is_covid_lockdown = (year == 2020 and week >= 6) or (year in [2021, 2022])
+                is_immunity_debt = (year == 2023 and week >= 10 and week <= 25)
+                
+                if is_initial_outbreak:
+                    # 疫情初期的超级恐慌：发热门诊挤兑，合并原有冬季流感高峰，产生创纪录的史诗级尖峰
+                    ili = max(7.0, seasonal * year_factor * 2.0 + noise * 3 + 5.0 + outbreak * 3)
+                elif is_covid_lockdown:
+                    # 封控与全民戴口罩时期：流感病毒（ILI）彻底失去季节性，断崖式暴跌至冰点
+                    ili = max(0.1, 0.3 + noise * 0.2)
+                elif is_immunity_debt:
+                    # 解封后的“免疫负债”：报复性反季大爆发（春夏季出现本不该存在的超级波峰）
+                    ili = max(4.0, seasonal * year_factor * 1.5 + noise * 2 + 3.5 + outbreak * 2)
+                else:
+                    # 正常年份流感走势
+                    ili = max(0.5, seasonal * year_factor + noise + outbreak)
+                
                 ili_rates.append(round(ili, 2))
                 
                 # 阳性率与 ILI 率正相关但有独立波动
@@ -287,7 +303,7 @@ class WeatherDataCollector:
                     all_data.append(chunk_df)
             
             current_start = current_end + timedelta(days=1)
-            time.sleep(0.3)
+            pass
         
         if all_data:
             df = pd.concat(all_data, ignore_index=True)

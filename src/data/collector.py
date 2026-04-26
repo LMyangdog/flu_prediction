@@ -1,577 +1,383 @@
 """
-数据采集模块 — 从多源获取流感监测、气象和搜索指数数据
+数据采集与多源对齐模块。
 
-数据来源：
-    1. 中国国家流感中心 (http://www.chinaivdc.cn/cnic/) — ILI 周报
-    2. Open-Meteo API (https://open-meteo.com/) — 免费气象数据 API
-    3. 百度指数模拟 / Google Trends — 搜索热度数据
-
-Author: flu_prediction project
+设计原则：
+    1. 毕设默认启用严格真实数据模式，不再回退到模拟/占位数据。
+    2. 所有数据源都需要在 source_manifest.json 中登记来源、区域、粒度与文件路径。
+    3. 合并后自动输出数据质量报告，便于中期检查、答辩和论文附录留档。
 """
 
-import os
-import re
-import json
-import time
-import warnings
-from datetime import datetime, timedelta
-from typing import Optional, List, Tuple
+from __future__ import annotations
 
-import numpy as np
+import os
+import time
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup
 
-warnings.filterwarnings('ignore')
+from src.data.quality import DataQualityAuditor, assert_required_columns, assert_source_manifest
+
+
+class SourceManifest:
+    """读取并校验原始数据来源清单。"""
+
+    REQUIRED_KEYS = {"path", "source_name", "region", "granularity", "collection_method"}
+
+    def __init__(self, manifest_path: str, strict: bool = True):
+        self.manifest_path = manifest_path
+        self.strict = strict
+        self.data = assert_source_manifest(manifest_path, strict=strict)
+
+    def get(self, dataset_name: str) -> Dict[str, str]:
+        if dataset_name not in self.data:
+            raise KeyError(
+                f"source_manifest.json 中缺少 `{dataset_name}` 配置，请先登记该数据源的路径与来源信息。"
+            )
+
+        entry = self.data[dataset_name]
+        missing = sorted(self.REQUIRED_KEYS - set(entry.keys()))
+        if missing:
+            raise KeyError(f"source_manifest.json 的 `{dataset_name}` 缺少字段: {missing}")
+        return entry
 
 
 class FluDataCollector:
-    """
-    流感监测数据采集器
-    
-    从中国国家流感中心采集流感样病例(ILI)监测数据。
-    包含备用数据生成方法，当网络采集失败时使用高仿真模拟数据。
-    """
-    
-    BASE_URL = "https://ivdc.chinacdc.cn/cnic/zyzx/lgzb"
-    HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                       '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    }
-    
-    def __init__(self, save_dir: str = "data/raw/flu"):
+    """流感监测数据读取器。当前默认读取国家流感中心北方省份周度序列。"""
+
+    BASE_REQUIRED_COLS = ["date", "year", "week"]
+
+    def __init__(self, save_dir: str = "data/raw/flu", required_cols=None):
         self.save_dir = save_dir
+        self.required_cols = required_cols or self.BASE_REQUIRED_COLS
         os.makedirs(save_dir, exist_ok=True)
-    
-    def fetch(self, start_year: int = 2018, end_year: int = 2025) -> pd.DataFrame:
-        """
-        采集流感监测数据
-        
-        Args:
-            start_year: 起始年份
-            end_year: 结束年份
-            
-        Returns:
-            包含 ILI 率和阳性率的 DataFrame
-        """
-        print(f"[FluDataCollector] 正在采集 {start_year}-{end_year} 年流感监测数据...")
-        
-        try:
-            df = self._fetch_from_web(start_year, end_year)
-            if df is not None and len(df) > 0:
-                print(f"[FluDataCollector] 成功从网络采集 {len(df)} 条数据")
-                df.to_csv(os.path.join(self.save_dir, "flu_data.csv"), index=False, encoding='utf-8-sig')
-                return df
-        except Exception as e:
-            print(f"[FluDataCollector] 网络采集失败: {e}")
-        
-        print("[FluDataCollector] 使用高仿真模拟数据...")
-        df = self._generate_realistic_data(start_year, end_year)
-        df.to_csv(os.path.join(self.save_dir, "flu_data.csv"), index=False, encoding='utf-8-sig')
+
+    def fetch(self, manifest_entry: Dict[str, str], start_year: int, end_year: int) -> pd.DataFrame:
+        source_path = manifest_entry["path"]
+        region = manifest_entry.get("region", "未标注区域")
+        if not os.path.exists(source_path):
+            raise FileNotFoundError(
+                f"未找到流感真实数据文件: {source_path}（区域：{region}）。"
+                "请重新爬取或整理官方周报后再运行。"
+            )
+
+        df = pd.read_csv(source_path)
+        assert_required_columns(df, self.required_cols, "flu")
+
+        df["date"] = pd.to_datetime(df["date"])
+        df = df[(df["year"] >= start_year) & (df["year"] <= end_year)].copy()
+        df = df.sort_values("date").reset_index(drop=True)
+
+        standardized_path = os.path.join(self.save_dir, "flu_data.csv")
+        df.to_csv(standardized_path, index=False, encoding="utf-8-sig")
+        print(f"[FluDataCollector] 已加载流感真实数据: {source_path}（区域：{region}）")
         return df
-    
-    def _fetch_from_web(self, start_year: int, end_year: int) -> Optional[pd.DataFrame]:
-        """从中国国家流感中心网站采集数据"""
-        all_data = []
-        session = requests.Session()
-        session.headers.update(self.HEADERS)
-        
-        for year in range(start_year, end_year + 1):
-            for week in range(1, 53):
-                try:
-                    # 尝试获取每周流感监测周报
-                    url = f"{self.BASE_URL}/{year}/{year}{week:02d}.htm"
-                    resp = session.get(url, timeout=10)
-                    
-                    if resp.status_code == 200:
-                        resp.encoding = 'utf-8'
-                        soup = BeautifulSoup(resp.text, 'lxml')
-                        
-                        # 解析页面中的 ILI 数据
-                        data = self._parse_flu_page(soup, year, week)
-                        if data:
-                            all_data.append(data)
-                    
-                    pass  # 礼貌爬取
-                    
-                except requests.RequestException:
-                    continue
-        
-        if all_data:
-            return pd.DataFrame(all_data)
-        return None
-    
-    def _parse_flu_page(self, soup: BeautifulSoup, year: int, week: int) -> Optional[dict]:
-        """解析流感周报页面提取关键指标"""
-        try:
-            text = soup.get_text()
-            
-            # 尝试提取 ILI% 数据
-            ili_match = re.search(r'ILI%[为是]?\s*([\d.]+)%?', text)
-            pos_match = re.search(r'阳性率[为是]?\s*([\d.]+)%?', text)
-            
-            ili_rate = float(ili_match.group(1)) if ili_match else None
-            positive_rate = float(pos_match.group(1)) if pos_match else None
-            
-            if ili_rate is not None:
-                # 计算该周的起始日期
-                date = datetime.strptime(f'{year}-W{week:02d}-1', '%Y-W%W-%w')
-                return {
-                    'date': date.strftime('%Y-%m-%d'),
-                    'year': year,
-                    'week': week,
-                    'ili_rate': ili_rate,
-                    'positive_rate': positive_rate if positive_rate else ili_rate * 0.3
-                }
-        except Exception:
-            pass
-        return None
-    
-    def _generate_realistic_data(self, start_year: int, end_year: int) -> pd.DataFrame:
-        """
-        生成高仿真流感监测模拟数据
-        
-        模拟特征：
-        - 强季节性：冬季（11-3月）高峰，夏季（6-8月）低谷
-        - 年际变异：不同年份高峰强度不同
-        - 随机噪声：模拟真实数据的随机波动
-        - 偶发性暴发：模拟偶发的流感暴发事件
-        """
-        np.random.seed(42)
-        dates = []
-        ili_rates = []
-        positive_rates = []
-        
-        for year in range(start_year, end_year + 1):
-            for week in range(1, 53):
-                try:
-                    # 计算日期
-                    date = datetime.strptime(f'{year}-W{week:02d}-1', '%G-W%V-%u')
-                except ValueError:
-                    continue
-                
-                dates.append(date)
-                
-                # 季节性成分 — 冬季高峰
-                seasonal = 2.5 * np.cos(2 * np.pi * (week - 4) / 52) + 3.5
-                
-                # 年际变异
-                year_factor = 1.0 + 0.3 * np.sin(2 * np.pi * (year - start_year) / 3)
-                
-                # 随机噪声
-                noise = np.random.normal(0, 0.3)
-                
-                # 偶发暴发（约5%概率）
-                outbreak = 0
-                if np.random.random() < 0.05 and week in range(48, 53) or week in range(1, 12):
-                    outbreak = np.random.exponential(1.5)
-                
-                # ==== 核心新增：真实模拟 2020-2023 疫情时代的极端骤变 ====
-                is_initial_outbreak = (year == 2020 and week <= 5)
-                is_covid_lockdown = (year == 2020 and week >= 6) or (year in [2021, 2022])
-                is_immunity_debt = (year == 2023 and week >= 10 and week <= 25)
-                
-                if is_initial_outbreak:
-                    # 疫情初期的超级恐慌：发热门诊挤兑，合并原有冬季流感高峰，产生创纪录的史诗级尖峰
-                    ili = max(7.0, seasonal * year_factor * 2.0 + noise * 3 + 5.0 + outbreak * 3)
-                elif is_covid_lockdown:
-                    # 封控与全民戴口罩时期：流感病毒（ILI）彻底失去季节性，断崖式暴跌至冰点
-                    ili = max(0.1, 0.3 + noise * 0.2)
-                elif is_immunity_debt:
-                    # 解封后的“免疫负债”：报复性反季大爆发（春夏季出现本不该存在的超级波峰）
-                    ili = max(4.0, seasonal * year_factor * 1.5 + noise * 2 + 3.5 + outbreak * 2)
-                else:
-                    # 正常年份流感走势
-                    ili = max(0.5, seasonal * year_factor + noise + outbreak)
-                
-                ili_rates.append(round(ili, 2))
-                
-                # 阳性率与 ILI 率正相关但有独立波动
-                pos = max(5.0, ili * 8 + np.random.normal(0, 3))
-                positive_rates.append(round(min(pos, 75.0), 2))
-        
-        df = pd.DataFrame({
-            'date': dates,
-            'year': [d.year for d in dates],
-            'week': [d.isocalendar()[1] for d in dates],
-            'ili_rate': ili_rates,
-            'positive_rate': positive_rates
-        })
-        
-        df['date'] = pd.to_datetime(df['date'])
-        return df.sort_values('date').reset_index(drop=True)
 
 
 class WeatherDataCollector:
-    """
-    气象数据采集器
-    
-    使用 Open-Meteo 免费 API 获取历史气象数据。
-    Open-Meteo 无需 API Key，支持全球历史天气数据。
-    """
-    
+    """历史气象数据读取器；如 manifest 指定 API，可自动拉取并缓存。"""
+
     BASE_URL = "https://archive-api.open-meteo.com/v1/archive"
-    
-    # 中国主要城市坐标
-    CITY_COORDS = {
-        "北京": (39.9042, 116.4074),
-        "上海": (31.2304, 121.4737),
-        "广州": (23.1291, 113.2644),
-        "深圳": (22.5431, 114.0579),
-        "武汉": (30.5928, 114.3055),
-        "成都": (30.5728, 104.0668),
-    }
-    
-    def __init__(self, save_dir: str = "data/raw/weather"):
+    REQUIRED_COLS = ["date", "temperature", "humidity", "wind_speed", "pressure"]
+    DEFAULT_LOCATION = {"name": "北京", "latitude": 39.9042, "longitude": 116.4074}
+
+    def __init__(self, save_dir: str = "data/raw/weather", locations: Optional[List[Dict[str, float]]] = None):
         self.save_dir = save_dir
+        self.locations = locations or [self.DEFAULT_LOCATION]
         os.makedirs(save_dir, exist_ok=True)
-    
-    def fetch(self, city: str = "北京", 
-              start_date: str = "2018-01-01", 
-              end_date: str = "2025-12-31") -> pd.DataFrame:
-        """
-        采集气象数据
-        
-        Args:
-            city: 目标城市
-            start_date: 起始日期 (YYYY-MM-DD)
-            end_date: 结束日期 (YYYY-MM-DD)
-            
-        Returns:
-            包含温度、湿度、风速、气压的 DataFrame
-        """
-        print(f"[WeatherDataCollector] 正在采集 {city} {start_date}~{end_date} 气象数据...")
-        
-        try:
-            df = self._fetch_from_api(city, start_date, end_date)
-            if df is not None and len(df) > 0:
-                print(f"[WeatherDataCollector] 成功从 Open-Meteo API 获取 {len(df)} 天数据")
-                df.to_csv(os.path.join(self.save_dir, "weather_data.csv"), 
-                         index=False, encoding='utf-8-sig')
-                return df
-        except Exception as e:
-            print(f"[WeatherDataCollector] API 调用失败: {e}")
-        
-        print("[WeatherDataCollector] 使用高仿真模拟数据...")
-        df = self._generate_realistic_data(start_date, end_date)
-        df.to_csv(os.path.join(self.save_dir, "weather_data.csv"), 
-                 index=False, encoding='utf-8-sig')
-        return df
-    
-    def _fetch_from_api(self, city: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
-        """从 Open-Meteo API 获取历史气象数据"""
-        if city not in self.CITY_COORDS:
-            print(f"[WeatherDataCollector] 城市 {city} 不在预设列表中，使用北京坐标")
-            lat, lon = self.CITY_COORDS["北京"]
+
+    def fetch(self, manifest_entry: Dict[str, str], start_date: str, end_date: str) -> pd.DataFrame:
+        source_path = manifest_entry["path"]
+        collection_method = manifest_entry.get("collection_method", "").lower()
+
+        if os.path.exists(source_path):
+            df = pd.read_csv(source_path)
+            print(f"[WeatherDataCollector] 已加载历史气象数据: {source_path}")
+        elif collection_method == "open-meteo-api":
+            df = self._fetch_from_api(start_date, end_date)
+            os.makedirs(os.path.dirname(source_path), exist_ok=True)
+            df.to_csv(source_path, index=False, encoding="utf-8-sig")
+            print(f"[WeatherDataCollector] 已通过 Open-Meteo 拉取并缓存到: {source_path}")
         else:
-            lat, lon = self.CITY_COORDS[city]
-        
-        # Open-Meteo API 限制每次请求的时间跨度，需分段请求
+            raise FileNotFoundError(
+                f"未找到气象真实数据文件: {source_path}，且 manifest 未声明可自动拉取。"
+            )
+
+        assert_required_columns(df, self.REQUIRED_COLS, "weather")
+        df["date"] = pd.to_datetime(df["date"])
+        standardized_path = os.path.join(self.save_dir, "weather_data.csv")
+        df.to_csv(standardized_path, index=False, encoding="utf-8-sig")
+        return df.sort_values("date").reset_index(drop=True)
+
+    def _fetch_from_api(self, start_date: str, end_date: str) -> pd.DataFrame:
+        location_frames = []
+        for location in self.locations:
+            location_frames.append(self._fetch_location_from_api(location, start_date, end_date))
+
+        if not location_frames:
+            raise RuntimeError("未配置可用气象站点，无法构建真实气象数据。")
+
+        df = pd.concat(location_frames, ignore_index=True)
+        if "location" not in df.columns or df["location"].nunique() == 1:
+            return df.drop(columns=["location"], errors="ignore")
+
+        value_cols = ["temperature", "humidity", "wind_speed", "pressure"]
+        aggregated = df.groupby("date", as_index=False)[value_cols].mean()
+        return aggregated.sort_values("date").reset_index(drop=True)
+
+    def _fetch_location_from_api(self, location: Dict[str, float], start_date: str, end_date: str) -> pd.DataFrame:
+        name = str(location.get("name", "未命名站点"))
+        latitude = float(location["latitude"])
+        longitude = float(location["longitude"])
         all_data = []
-        start = datetime.strptime(start_date, '%Y-%m-%d')
-        end = datetime.strptime(end_date, '%Y-%m-%d')
-        
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+        end = datetime.strptime(end_date, "%Y-%m-%d")
         current_start = start
-        while current_start < end:
+
+        while current_start <= end:
             current_end = min(current_start + timedelta(days=365), end)
-            
             params = {
-                'latitude': lat,
-                'longitude': lon,
-                'start_date': current_start.strftime('%Y-%m-%d'),
-                'end_date': current_end.strftime('%Y-%m-%d'),
-                'daily': 'temperature_2m_mean,relative_humidity_2m_mean,'
-                         'wind_speed_10m_max,surface_pressure_mean',
-                'timezone': 'Asia/Shanghai',
+                "latitude": latitude,
+                "longitude": longitude,
+                "start_date": current_start.strftime("%Y-%m-%d"),
+                "end_date": current_end.strftime("%Y-%m-%d"),
+                "daily": ",".join(
+                    [
+                        "temperature_2m_mean",
+                        "relative_humidity_2m_mean",
+                        "wind_speed_10m_max",
+                        "surface_pressure_mean",
+                    ]
+                ),
+                "timezone": "Asia/Shanghai",
             }
-            
-            resp = requests.get(self.BASE_URL, params=params, timeout=30)
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                if 'daily' in data:
-                    daily = data['daily']
-                    chunk_df = pd.DataFrame({
-                        'date': daily['time'],
-                        'temperature': daily.get('temperature_2m_mean', [None] * len(daily['time'])),
-                        'humidity': daily.get('relative_humidity_2m_mean', [None] * len(daily['time'])),
-                        'wind_speed': daily.get('wind_speed_10m_max', [None] * len(daily['time'])),
-                        'pressure': daily.get('surface_pressure_mean', [None] * len(daily['time'])),
-                    })
-                    all_data.append(chunk_df)
-            
+            resp = None
+            success = False
+            last_exc = None
+            for attempt in range(4):
+                try:
+                    resp = requests.get(self.BASE_URL, params=params, timeout=45)
+                    resp.raise_for_status()
+                    success = True
+                    break
+                except requests.RequestException as exc:
+                    last_exc = exc
+                    if attempt < 3:
+                        wait_seconds = 2 * (attempt + 1)
+                        print(f"[WeatherDataCollector] {name} {params['start_date']}~{params['end_date']} 拉取失败，{wait_seconds}s 后重试: {exc}")
+                        time.sleep(wait_seconds)
+            if not success or resp is None:
+                raise RuntimeError(
+                    f"Open-Meteo 拉取失败: {name} {params['start_date']}~{params['end_date']}"
+                ) from last_exc
+
+            data = resp.json().get("daily", {})
+            if data:
+                chunk = pd.DataFrame(
+                    {
+                        "date": data["time"],
+                        "location": name,
+                        "temperature": data.get("temperature_2m_mean"),
+                        "humidity": data.get("relative_humidity_2m_mean"),
+                        "wind_speed": data.get("wind_speed_10m_max"),
+                        "pressure": data.get("surface_pressure_mean"),
+                    }
+                )
+                all_data.append(chunk)
+
             current_start = current_end + timedelta(days=1)
-            pass
-        
-        if all_data:
-            df = pd.concat(all_data, ignore_index=True)
-            df['date'] = pd.to_datetime(df['date'])
-            return df
-        return None
-    
-    def _generate_realistic_data(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """
-        生成北京地区高仿真气象模拟数据
-        
-        模拟特征：
-        - 温度：年周期变化(-10~35°C)，冬冷夏热
-        - 湿度：夏季高，冬季低
-        - 风速：春季较大（沙尘季）
-        - 气压：冬季偏高，夏季偏低
-        """
-        np.random.seed(123)
-        dates = pd.date_range(start=start_date, end=end_date, freq='D')
-        day_of_year = dates.dayofyear
-        
-        # 温度：北京年均温约12°C，振幅约20°C
-        temp_base = 12 + 20 * np.sin(2 * np.pi * (day_of_year - 105) / 365)
-        temperature = temp_base + np.random.normal(0, 3, len(dates))
-        
-        # 湿度：夏季高(70-90%)，冬季低(30-50%)
-        humidity_base = 55 + 20 * np.sin(2 * np.pi * (day_of_year - 90) / 365)
-        humidity = humidity_base + np.random.normal(0, 8, len(dates))
-        humidity = np.clip(humidity, 10, 100)
-        
-        # 风速：春季较大
-        wind_base = 3.0 + 1.5 * np.cos(2 * np.pi * (day_of_year - 90) / 365)
-        wind_speed = wind_base + np.abs(np.random.normal(0, 1.5, len(dates)))
-        
-        # 气压：冬季高，夏季低
-        pressure_base = 1015 + 10 * np.cos(2 * np.pi * (day_of_year - 15) / 365)
-        pressure = pressure_base + np.random.normal(0, 5, len(dates))
-        
-        df = pd.DataFrame({
-            'date': dates,
-            'temperature': np.round(temperature, 1),
-            'humidity': np.round(humidity, 1),
-            'wind_speed': np.round(wind_speed, 1),
-            'pressure': np.round(pressure, 1),
-        })
-        
+
+        if not all_data:
+            raise RuntimeError(f"Open-Meteo 返回为空，无法构建 {name} 的真实气象数据。")
+
+        df = pd.concat(all_data, ignore_index=True)
+        df["date"] = pd.to_datetime(df["date"])
         return df
 
 
 class SearchIndexCollector:
-    """
-    搜索指数数据采集器
-    
-    采集百度指数 / Google Trends 上与流感相关关键词的搜索热度。
-    由于百度指数访问受限，提供基于流感季节性的高仿真模拟数据作为备选。
-    """
-    
-    KEYWORDS = ["流感", "感冒", "发烧", "咳嗽", "发热门诊"]
-    
+    """搜索指数读取器。"""
+
+    REQUIRED_COLS = ["date", "flu_search_index", "cold_search_index", "fever_search_index"]
+
     def __init__(self, save_dir: str = "data/raw/search"):
         self.save_dir = save_dir
         os.makedirs(save_dir, exist_ok=True)
-    
-    def fetch(self, keywords: Optional[List[str]] = None,
-              start_date: str = "2018-01-01",
-              end_date: str = "2025-12-31") -> pd.DataFrame:
-        """
-        采集搜索指数数据
-        
-        Args:
-            keywords: 搜索关键词列表
-            start_date: 起始日期
-            end_date: 结束日期
-            
-        Returns:
-            包含搜索指数的 DataFrame
-        """
-        if keywords is None:
-            keywords = self.KEYWORDS[:3]  # 默认使用前3个关键词
-        
-        print(f"[SearchIndexCollector] 正在采集关键词 {keywords} 的搜索指数...")
-        
-        # 尝试通过 Google Trends (pytrends) 获取
-        try:
-            df = self._fetch_from_google_trends(keywords, start_date, end_date)
-            if df is not None and len(df) > 0:
-                print(f"[SearchIndexCollector] 成功获取 {len(df)} 条搜索指数数据")
-                df.to_csv(os.path.join(self.save_dir, "search_data.csv"),
-                         index=False, encoding='utf-8-sig')
-                return df
-        except Exception as e:
-            print(f"[SearchIndexCollector] Google Trends 采集失败: {e}")
-        
-        print("[SearchIndexCollector] 使用高仿真模拟数据...")
-        df = self._generate_realistic_data(keywords, start_date, end_date)
-        df.to_csv(os.path.join(self.save_dir, "search_data.csv"),
-                 index=False, encoding='utf-8-sig')
+
+    def fetch(self, manifest_entry: Dict[str, str]) -> pd.DataFrame:
+        source_path = manifest_entry["path"]
+        if not os.path.exists(source_path):
+            raise FileNotFoundError(
+                f"未找到搜索指数真实数据文件: {source_path}。"
+                "请优先使用 scripts/fetch_baidu.py 重新抓取或人工导出后再运行训练。"
+            )
+
+        df = pd.read_csv(source_path)
+        assert_required_columns(df, self.REQUIRED_COLS, "search")
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date").reset_index(drop=True)
+
+        standardized_path = os.path.join(self.save_dir, "search_data.csv")
+        df.to_csv(standardized_path, index=False, encoding="utf-8-sig")
+        print(f"[SearchIndexCollector] 已加载真实搜索指数数据: {source_path}")
         return df
-    
-    def _fetch_from_google_trends(self, keywords: List[str], 
-                                   start_date: str, end_date: str) -> Optional[pd.DataFrame]:
-        """通过 Google Trends 获取搜索趋势（已弃用，由于访问超时导致数据缺失大块白板）"""
-        return None
-    
-    def _generate_realistic_data(self, keywords: List[str],
-                                  start_date: str, end_date: str) -> pd.DataFrame:
-        """
-        生成高仿真搜索指数模拟数据
-        
-        模拟特征：
-        - 与流感季节高度相关（冬季搜索量激增）
-        - 搜索高峰略早于流感高峰（前瞻性指标）
-        - 不同关键词间有相关性但不完全同步
-        - 包含随机热点事件带来的搜索脉冲
-        """
-        np.random.seed(456)
-        dates = pd.date_range(start=start_date, end=end_date, freq='D')
-        day_of_year = dates.dayofyear
-        
-        data = {'date': dates}
-        column_names = ['flu_search_index', 'cold_search_index', 'fever_search_index']
-        
-        for i, (keyword, col_name) in enumerate(zip(keywords[:3], column_names)):
-            # 基础季节性 — 搜索高峰略早于实际流感高峰（前瞻2-3周）
-            phase_shift = 10 + i * 5  # 不同关键词相位略有差异
-            seasonal = 40 * np.cos(2 * np.pi * (day_of_year - phase_shift) / 365) + 50
-            
-            # 年际趋势（搜索量逐年略增）
-            year_trend = (dates.year - 2018) * 2
-            
-            # 随机噪声
-            noise = np.random.normal(0, 8, len(dates))
-            
-            # 热点事件脉冲（约3%概率出现在流感季）
-            pulses = np.zeros(len(dates))
-            for j in range(len(dates)):
-                if np.random.random() < 0.03 and (dates[j].month in [11, 12, 1, 2, 3]):
-                    pulses[j] = np.random.exponential(20)
-            
-            index_values = seasonal + year_trend + noise + pulses
-            index_values = np.clip(index_values, 0, 100)
-            data[col_name] = np.round(index_values, 1)
-        
-        return pd.DataFrame(data)
 
 
 class MultiSourceDataCollector:
-    """
-    多源数据统一采集器
-    
-    整合流感、气象、搜索指数三方数据采集，
-    并进行初步的时间对齐（统一为周粒度）。
-    """
-    
+    """多源数据统一读取、周粒度对齐与质量审计。"""
+
     def __init__(self, config: dict):
         self.config = config
-        base_dir = config.get('data', {}).get('raw_dir', 'data/raw')
-        
-        self.flu_collector = FluDataCollector(os.path.join(base_dir, 'flu'))
-        self.weather_collector = WeatherDataCollector(os.path.join(base_dir, 'weather'))
-        self.search_collector = SearchIndexCollector(os.path.join(base_dir, 'search'))
-    
+        data_cfg = config.get("data", {})
+
+        raw_dir = data_cfg.get("raw_dir", "data/raw")
+        reports_dir = config.get("reporting", {}).get("reports_dir", "results/reports")
+        strict_real_data = data_cfg.get("strict_real_data", True)
+        manifest_path = data_cfg.get("manifest_path", os.path.join(raw_dir, "source_manifest.json"))
+
+        self.manifest = SourceManifest(manifest_path=manifest_path, strict=strict_real_data)
+        self.auditor = DataQualityAuditor(reports_dir=reports_dir)
+
+        flu_cols = config.get("features", {}).get("flu_cols", [])
+        self.flu_required_cols = ["date", "year", "week"] + flu_cols
+        self.flu_collector = FluDataCollector(os.path.join(raw_dir, "flu"), self.flu_required_cols)
+        self.weather_collector = WeatherDataCollector(
+            os.path.join(raw_dir, "weather"),
+            locations=data_cfg.get("weather_locations"),
+        )
+        self.search_collector = SearchIndexCollector(os.path.join(raw_dir, "search"))
+
     def collect_all(self) -> pd.DataFrame:
-        """
-        采集并合并所有数据源
-        
-        Returns:
-            统一为周粒度的多源融合 DataFrame
-        """
-        data_cfg = self.config.get('data', {})
-        start_year = data_cfg.get('start_year', 2018)
-        end_year = data_cfg.get('end_year', 2025)
-        city = data_cfg.get('target_city', '北京')
-        
+        data_cfg = self.config.get("data", {})
+        start_year = data_cfg.get("start_year", 2018)
+        end_year = data_cfg.get("end_year", 2025)
         start_date = f"{start_year}-01-01"
-        end_date = f"{end_year}-12-31"
-        
-        # 1. 采集流感数据（已为周粒度）
-        flu_df = self.flu_collector.fetch(start_year, end_year)
-        
-        # 2. 采集气象数据（日粒度 → 聚合为周）
-        weather_df = self.weather_collector.fetch(city, start_date, end_date)
-        weather_weekly = self._aggregate_to_weekly(weather_df, 
-                                                    agg_funcs={'temperature': 'mean', 
-                                                               'humidity': 'mean',
-                                                               'wind_speed': 'mean',
-                                                               'pressure': 'mean'})
-        
-        # 3. 采集搜索指数数据（日粒度 → 聚合为周）
-        search_df = self.search_collector.fetch(start_date=start_date, end_date=end_date)
-        search_weekly = self._aggregate_to_weekly(search_df,
-                                                   agg_funcs={'flu_search_index': 'mean',
-                                                              'cold_search_index': 'mean',
-                                                              'fever_search_index': 'mean'})
-        
-        # 4. 按周合并三方数据
+        configured_end = datetime.strptime(f"{end_year}-12-31", "%Y-%m-%d")
+        end_date = min(configured_end, datetime.today()).strftime("%Y-%m-%d")
+
+        flu_meta = self.manifest.get("flu")
+        weather_meta = self.manifest.get("weather")
+        search_meta = self.manifest.get("search")
+
+        flu_df = self.flu_collector.fetch(flu_meta, start_year, end_year)
+        weather_df = self.weather_collector.fetch(weather_meta, start_date, end_date)
+        search_df = self.search_collector.fetch(search_meta)
+
+        weather_weekly = self._aggregate_to_weekly(
+            weather_df,
+            agg_funcs={
+                "temperature": "mean",
+                "humidity": "mean",
+                "wind_speed": "mean",
+                "pressure": "mean",
+            },
+        )
+        search_weekly = self._aggregate_to_weekly(
+            search_df,
+            agg_funcs={
+                "flu_search_index": "mean",
+                "cold_search_index": "mean",
+                "fever_search_index": "mean",
+            },
+        )
+
         merged = self._merge_datasets(flu_df, weather_weekly, search_weekly)
-        
-        # 保存合并后的数据
-        processed_dir = self.config.get('data', {}).get('processed_dir', 'data/processed')
+
+        processed_dir = data_cfg.get("processed_dir", "data/processed")
         os.makedirs(processed_dir, exist_ok=True)
-        merged.to_csv(os.path.join(processed_dir, 'merged_dataset.csv'), 
-                     index=False, encoding='utf-8-sig')
-        
-        print(f"\n[MultiSourceDataCollector] 数据采集完成！")
-        print(f"  - 总样本数: {len(merged)}")
+        merged_path = os.path.join(processed_dir, "merged_dataset.csv")
+        merged.to_csv(merged_path, index=False, encoding="utf-8-sig")
+
+        quality_report = {
+            "manifest": {
+                "path": self.manifest.manifest_path,
+                "flu": flu_meta,
+                "weather": weather_meta,
+                "search": search_meta,
+            },
+            "datasets": {
+                "flu": self.auditor.audit_dataset(flu_df, "flu", self.flu_required_cols, "weekly"),
+                "weather": self.auditor.audit_dataset(
+                    weather_df, "weather", WeatherDataCollector.REQUIRED_COLS, "daily"
+                ),
+                "search": self.auditor.audit_dataset(
+                    search_df, "search", SearchIndexCollector.REQUIRED_COLS, "daily"
+                ),
+                "merged": self.auditor.audit_dataset(
+                    merged,
+                    "merged",
+                    [
+                        "date",
+                        "year",
+                        "week",
+                        *self.config.get("features", {}).get("flu_cols", []),
+                        "temperature",
+                        "humidity",
+                        "wind_speed",
+                        "pressure",
+                        "flu_search_index",
+                        "cold_search_index",
+                        "fever_search_index",
+                    ],
+                    "weekly",
+                ),
+            },
+            "relationship_checks": self.auditor.audit_relationships(
+                merged,
+                target_col=self.config.get("features", {}).get("target_col", "ili_cases"),
+            ),
+        }
+        self.auditor.save_report(quality_report, filename="data_quality_report.json")
+
+        print("\n[MultiSourceDataCollector] 数据采集与对齐完成")
+        print(f"  - 合并样本数: {len(merged)}")
         print(f"  - 时间范围: {merged['date'].min()} ~ {merged['date'].max()}")
-        print(f"  - 特征列: {list(merged.columns)}")
-        
+        print(f"  - 数据质量报告: {os.path.join(self.auditor.reports_dir, 'data_quality_report.json')}")
+
         return merged
-    
-    def _aggregate_to_weekly(self, df: pd.DataFrame, agg_funcs: dict) -> pd.DataFrame:
-        """将日粒度数据聚合为周粒度"""
+
+    def _aggregate_to_weekly(self, df: pd.DataFrame, agg_funcs: Dict[str, str]) -> pd.DataFrame:
         df = df.copy()
-        df['date'] = pd.to_datetime(df['date'])
-        
-        # 按 ISO 周聚合
-        df['year'] = df['date'].dt.isocalendar().year.astype(int)
-        df['week'] = df['date'].dt.isocalendar().week.astype(int)
-        
-        # 取每周的第一天作为日期
-        weekly = df.groupby(['year', 'week']).agg(agg_funcs).reset_index()
-        
-        # 重建日期（取每周一）
-        weekly['date'] = weekly.apply(
-            lambda row: datetime.strptime(f"{int(row['year'])}-W{int(row['week']):02d}-1", '%G-W%V-%u'),
-            axis=1
+        df["date"] = pd.to_datetime(df["date"])
+        iso = df["date"].dt.isocalendar()
+        df["year"] = iso.year.astype(int)
+        df["week"] = iso.week.astype(int)
+
+        weekly = df.groupby(["year", "week"], as_index=False).agg(agg_funcs)
+        weekly["date"] = weekly.apply(
+            lambda row: datetime.strptime(
+                f"{int(row['year'])}-W{int(row['week']):02d}-1", "%G-W%V-%u"
+            ),
+            axis=1,
         )
-        
-        return weekly
-    
-    def _merge_datasets(self, flu_df: pd.DataFrame, 
-                        weather_df: pd.DataFrame,
-                        search_df: pd.DataFrame) -> pd.DataFrame:
-        """按年-周对齐合并三方数据"""
-        # 确保所有 DataFrame 都有 year 和 week 列
-        for df in [flu_df, weather_df, search_df]:
-            df['date'] = pd.to_datetime(df['date'])
-            if 'year' not in df.columns:
-                df['year'] = df['date'].dt.isocalendar().year.astype(int)
-            if 'week' not in df.columns:
-                df['week'] = df['date'].dt.isocalendar().week.astype(int)
-        
-        # 以流感数据为基础，左连接气象和搜索数据
-        merged = flu_df[['date', 'year', 'week', 'ili_rate', 'positive_rate']].copy()
-        
-        weather_cols = [c for c in weather_df.columns if c not in ['date', 'year', 'week']]
-        merged = merged.merge(
-            weather_df[['year', 'week'] + weather_cols],
-            on=['year', 'week'], how='left'
-        )
-        
-        search_cols = [c for c in search_df.columns if c not in ['date', 'year', 'week']]
-        merged = merged.merge(
-            search_df[['year', 'week'] + search_cols],
-            on=['year', 'week'], how='left'
-        )
-        
-        return merged.sort_values('date').reset_index(drop=True)
+        return weekly.sort_values("date").reset_index(drop=True)
+
+    def _merge_datasets(self, flu_df: pd.DataFrame, weather_df: pd.DataFrame, search_df: pd.DataFrame) -> pd.DataFrame:
+        flu_cols = self.config.get("features", {}).get("flu_cols", [])
+        metadata_cols = [
+            col
+            for col in ["flu_season", "digitized_source", "source_type"]
+            if col in flu_df.columns and col not in flu_cols
+        ]
+        merged = flu_df[["date", "year", "week"] + flu_cols + metadata_cols].copy()
+
+        weather_cols = [c for c in weather_df.columns if c not in {"date", "year", "week"}]
+        search_cols = [c for c in search_df.columns if c not in {"date", "year", "week"}]
+
+        merged = merged.merge(weather_df[["year", "week"] + weather_cols], on=["year", "week"], how="left")
+        merged = merged.merge(search_df[["year", "week"] + search_cols], on=["year", "week"], how="left")
+
+        merged["date"] = pd.to_datetime(merged["date"])
+        return merged.sort_values("date").reset_index(drop=True)
 
 
 if __name__ == "__main__":
     import yaml
-    
-    with open("config/config.yaml", 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
-    collector = MultiSourceDataCollector(config)
-    merged_data = collector.collect_all()
-    print(merged_data.head(10))
-    print(f"\n数据形状: {merged_data.shape}")
+
+    with open("config/config.yaml", "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    collector = MultiSourceDataCollector(cfg)
+    data = collector.collect_all()
+    print(data.head())

@@ -1,907 +1,1075 @@
 """
-流感爆发趋势预测系统 — Streamlit Web 仪表板
+流感爆发趋势预测系统 - Streamlit 答辩展示仪表板
 
-功能：
-    1. 数据总览与探索性分析
-    2. 模型训练与实时监控
-    3. 预测结果可视化
-    4. 多模型对比分析
-    5. 注意力权重可视化
-    6. 在线预测推理
-
-启动命令：
+启动命令:
     streamlit run web/app.py
-
-Author: flu_prediction project
 """
 
-import os
-import sys
+from __future__ import annotations
+
 import json
-import pickle
+import os
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
 import streamlit as st
+from plotly.subplots import make_subplots
 
-# 项目根目录
-project_root = str(Path(__file__).resolve().parent.parent)
-sys.path.insert(0, project_root)
 
-# ====================================================================
-# 页面配置
-# ====================================================================
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+RESULTS_DIR = PROJECT_ROOT / "results"
+FIGURES_DIR = RESULTS_DIR / "figures"
+REPORTS_DIR = RESULTS_DIR / "reports"
+DATA_DIR = PROJECT_ROOT / "data"
+
+TARGET_LABEL = "北方省份哨点医院 ILI%"
+MODEL_ORDER = ["iTransformer", "ARIMA", "DLinear", "LSTM"]
+MODEL_COLORS = {
+    "iTransformer": "#2563EB",
+    "ARIMA": "#16A34A",
+    "DLinear": "#9333EA",
+    "LSTM": "#EA580C",
+    "Actual": "#111827",
+}
+
+
 st.set_page_config(
-    page_title="流感爆发趋势预测系统",
-    page_icon="🦠",
+    page_title="流感趋势预测答辩展示",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ====================================================================
-# 自定义 CSS
-# ====================================================================
-st.markdown("""
+
+st.markdown(
+    """
 <style>
-    /* 全局样式 */
+    :root {
+        --ink: #172033;
+        --muted: #667085;
+        --line: #E4E7EC;
+        --panel: #FFFFFF;
+        --soft: #F6F8FB;
+        --blue: #2563EB;
+        --green: #16A34A;
+        --amber: #D97706;
+        --red: #DC2626;
+    }
+
+    .stApp {
+        background: #F7F8FA;
+        color: var(--ink);
+    }
+
     .main .block-container {
-        padding-top: 1rem;
-        max-width: 1400px;
+        max-width: 1360px;
+        padding: 1.1rem 1.8rem 2.6rem;
     }
-    
-    /* 标题样式 */
-    .hero-title {
-        font-size: 2.4rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-align: center;
-        margin-bottom: 0.2rem;
-        letter-spacing: -0.5px;
+
+    header,
+    header[data-testid="stHeader"],
+    footer,
+    #MainMenu,
+    .stDeployButton,
+    .stAppDeployButton,
+    div[data-testid="stToolbar"],
+    div[data-testid="stDecoration"],
+    div[data-testid="stStatusWidget"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
     }
-    
-    .hero-subtitle {
-        font-size: 1.05rem;
-        color: #6c757d;
-        text-align: center;
-        margin-bottom: 1.5rem;
+
+    h1, h2, h3 {
+        letter-spacing: 0;
     }
-    
-    /* 指标卡片 */
-    .metric-card {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
-        border-radius: 12px;
-        padding: 1.2rem;
-        border: 1px solid rgba(102, 126, 234, 0.15);
-        text-align: center;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    
-    .metric-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15);
-    }
-    
-    .metric-value {
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: #667eea;
-    }
-    
-    .metric-label {
-        font-size: 0.85rem;
-        color: #6c757d;
-        margin-top: 0.3rem;
-    }
-    
-    /* 侧边栏 */
-    .css-1d391kg {
-        padding-top: 1rem;
-    }
-    
-    /* 分割线 */
-    .section-divider {
-        height: 3px;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #667eea 100%);
-        border: none;
-        border-radius: 2px;
-        margin: 1.5rem 0;
-    }
-    
-    /* 信息卡片 */
-    .info-box {
-        background: rgba(33, 150, 243, 0.06);
-        border-left: 4px solid #2196F3;
-        border-radius: 0 8px 8px 0;
-        padding: 0.8rem 1.2rem;
-        margin: 0.8rem 0;
-        font-size: 0.9rem;
-    }
-    
-    /* 表格优化 */
-    .dataframe {
+
+    .top-band {
+        background: #FFFFFF;
+        border: 1px solid var(--line);
+        border-left: 6px solid var(--blue);
         border-radius: 8px;
-        overflow: hidden;
+        padding: 1.15rem 1.25rem;
+        margin-bottom: 1rem;
     }
-    
-    /* 隐藏 Streamlit 默认元素与外包组件 */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .stDeployButton {display:none;}
-    .stAppDeployButton {display:none;}
-    header {visibility: hidden;}
+
+    .eyebrow {
+        color: var(--blue);
+        font-size: 0.84rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+
+    .page-title {
+        color: var(--ink);
+        font-size: 2rem;
+        font-weight: 800;
+        margin: 0 0 0.35rem 0;
+    }
+
+    .page-subtitle {
+        color: var(--muted);
+        font-size: 0.98rem;
+        line-height: 1.62;
+        margin: 0;
+    }
+
+    .section-title {
+        color: var(--ink);
+        font-size: 1.18rem;
+        font-weight: 760;
+        margin: 1.15rem 0 0.65rem;
+    }
+
+    .kpi-card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.95rem 1rem;
+        min-height: 118px;
+    }
+
+    .kpi-label {
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 650;
+        margin-bottom: 0.42rem;
+    }
+
+    .kpi-value {
+        color: var(--ink);
+        font-size: 1.42rem;
+        font-weight: 820;
+        line-height: 1.22;
+    }
+
+    .kpi-note {
+        color: var(--muted);
+        font-size: 0.79rem;
+        margin-top: 0.45rem;
+        line-height: 1.38;
+    }
+
+    .story-card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.9rem 1rem;
+        min-height: 132px;
+    }
+
+    .story-index {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.65rem;
+        height: 1.65rem;
+        border-radius: 50%;
+        background: #EFF6FF;
+        color: var(--blue);
+        font-weight: 800;
+        margin-bottom: 0.55rem;
+    }
+
+    .story-title {
+        color: var(--ink);
+        font-weight: 780;
+        margin-bottom: 0.32rem;
+    }
+
+    .story-text {
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.48;
+    }
+
+    .note-box {
+        background: #F8FAFC;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.82rem 0.95rem;
+        color: #475467;
+        font-size: 0.9rem;
+        line-height: 1.55;
+    }
+
+    .verdict {
+        background: #FFFFFF;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 1rem 1.05rem;
+    }
+
+    .verdict strong {
+        color: var(--ink);
+    }
+
+    .status-pill {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 0.16rem 0.58rem;
+        font-size: 0.78rem;
+        font-weight: 750;
+        margin-bottom: 0.35rem;
+    }
+
+    .pill-blue { background: #EFF6FF; color: #1D4ED8; }
+    .pill-green { background: #ECFDF3; color: #15803D; }
+    .pill-amber { background: #FFF7ED; color: #B45309; }
+    .pill-red { background: #FEF2F2; color: #B91C1C; }
+
+    .small-table div[data-testid="stDataFrame"] {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+    }
+
+    div[data-testid="stMetric"] {
+        background: #FFFFFF;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.85rem 0.9rem;
+    }
+
+    div[data-testid="stMetricLabel"] {
+        color: var(--muted);
+    }
+
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0.2rem;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px 8px 0 0;
+        padding: 0.55rem 0.95rem;
+    }
 </style>
-""", unsafe_allow_html=True)
-
-# ====================================================================
-# 配色方案
-# ====================================================================
-COLORS = {
-    'iTransformer': '#667eea',
-    'LSTM': '#FF9800',
-    'ARIMA': '#4CAF50',
-    'DLinear': '#9C27B0',
-    'actual': '#E53935',
-    'primary': '#667eea',
-    'secondary': '#764ba2',
-    'bg_gradient_start': '#667eea',
-    'bg_gradient_end': '#764ba2',
-}
+""",
+    unsafe_allow_html=True,
+)
 
 
-# ====================================================================
-# 辅助函数
-# ====================================================================
+def read_json(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 @st.cache_data
-def load_data():
-    """加载已处理的数据"""
-    data_paths = {
-        'merged': os.path.join(project_root, 'data/processed/merged_dataset.csv'),
-        'featured': os.path.join(project_root, 'data/processed/featured_dataset.csv'),
+def load_data() -> dict[str, pd.DataFrame]:
+    data: dict[str, pd.DataFrame] = {}
+    paths = {
+        "merged": DATA_DIR / "processed" / "merged_dataset.csv",
+        "featured": DATA_DIR / "processed" / "featured_dataset.csv",
     }
-    
-    data = {}
-    for name, path in data_paths.items():
-        if os.path.exists(path):
-            data[name] = pd.read_csv(path)
-            if 'date' in data[name].columns:
-                data[name]['date'] = pd.to_datetime(data[name]['date'])
-    
+    for name, path in paths.items():
+        if path.exists():
+            df = pd.read_csv(path)
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"])
+            data[name] = df
     return data
 
 
 @st.cache_data
-def load_metrics():
-    """加载所有模型的评估指标"""
-    metrics_path = os.path.join(project_root, 'results/figures/all_metrics.json')
-    if os.path.exists(metrics_path):
-        with open(metrics_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {}
+def load_metrics() -> dict[str, dict[str, float]]:
+    summary = read_json(REPORTS_DIR / "experiment_summary.json", {})
+    if summary.get("metrics"):
+        return summary["metrics"]
+    return read_json(FIGURES_DIR / "all_metrics.json", {})
 
 
 @st.cache_data
-def load_training_history(model_name: str):
-    """加载模型训练历史"""
-    history_path = os.path.join(project_root, f'results/logs/{model_name}_history.json')
-    if os.path.exists(history_path):
-        with open(history_path, 'r') as f:
-            return json.load(f)
-    return None
+def load_experiment_summary() -> dict[str, Any]:
+    return read_json(REPORTS_DIR / "experiment_summary.json", {})
 
 
-def load_predictions():
-    """加载预测结果"""
-    splits_dir = os.path.join(project_root, 'data/splits')
-    results = {}
-    
-    if os.path.exists(os.path.join(splits_dir, 'y_test.npy')):
-        results['y_test'] = np.load(os.path.join(splits_dir, 'y_test.npy'))
-    
-    return results
+@st.cache_data
+def load_horizon_metrics() -> dict[str, dict[str, float]]:
+    summary = load_experiment_summary()
+    if summary.get("horizon_metrics"):
+        return summary["horizon_metrics"]
+    return read_json(REPORTS_DIR / "horizon_metrics.json", {})
 
 
-# ====================================================================
-# 页面渲染函数
-# ====================================================================
-def render_header():
-    """渲染页面头部"""
-    st.markdown('<h1 class="hero-title">🦠 流感爆发趋势预测系统</h1>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="hero-subtitle">基于 iTransformer 深度学习架构 · 融合多源异构数据 · 高精度预测</p>',
-        unsafe_allow_html=True
-    )
-    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+@st.cache_data
+def load_audit() -> dict[str, Any]:
+    return read_json(REPORTS_DIR / "final_data_audit.json", {})
 
 
-def render_sidebar():
-    """渲染侧边栏"""
-    with st.sidebar:
-        st.markdown("### 🎛️ 控制面板")
-        
-        page = st.radio(
-            "选择页面",
-            ["📊 数据总览", "🧠 模型训练", "📈 预测分析", "🔬 对比实验", "🛡️ 预警与调度", "⚙️ 系统设置"],
-            index=0
-        )
-        
-        st.markdown("---")
-        
-        st.markdown("### 📋 项目信息")
-        st.markdown("""
-        - **课题**: 基于深度学习和多元数据的流感爆发趋势预测
-        - **核心模型**: iTransformer
-        - **数据来源**: 
-          - 国家流感中心
-          - 气象数据
-          - 搜索指数
-        """)
-        
-        st.markdown("---")
-        st.markdown(
-            '<div style="text-align:center; color: #999; font-size: 0.8rem;">'
-            '中国海洋大学 · 信息科学与工程学部<br>'
-            '计算机科学与技术 2022级'
-            '</div>',
-            unsafe_allow_html=True
-        )
-        
-        return page
+@st.cache_data
+def load_ablation() -> pd.DataFrame:
+    path = REPORTS_DIR / "ablation_metrics.csv"
+    if path.exists():
+        return pd.read_csv(path)
+    return pd.DataFrame()
 
 
-def render_data_overview():
-    """数据总览页面"""
-    st.markdown("## 📊 多源数据总览")
-    
-    data = load_data()
-    
-    if 'merged' not in data:
-        st.warning("⚠️ 尚未采集数据。请先运行训练脚本: `python scripts/train.py`")
-        
-        st.markdown("""
-        ### 快速开始
-        ```bash
-        # 1. 安装依赖
-        pip install -r requirements.txt
-        
-        # 2. 运行训练脚本（包含数据采集）
-        python scripts/train.py --debug
-        
-        # 3. 启动 Web 仪表板
-        streamlit run web/app.py
-        ```
-        """)
-        return
-    
-    df = data['merged']
-    
-    # 数据统计卡片
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value">{len(df)}</div>
-            <div class="metric-label">总样本数（周）</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        if 'date' in df.columns:
-            date_range = f"{df['date'].min().strftime('%Y-%m')} ~ {df['date'].max().strftime('%Y-%m')}"
-        else:
-            date_range = "N/A"
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value" style="font-size:1.2rem">{date_range}</div>
-            <div class="metric-label">时间范围</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        n_features = len([c for c in df.columns if c not in ['date', 'year', 'week']])
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value">{n_features}</div>
-            <div class="metric-label">特征维度</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        missing = df.isnull().sum().sum()
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value">{missing}</div>
-            <div class="metric-label">缺失值总数</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # 多源数据时序图
-    tab1, tab2, tab3, tab4 = st.tabs(["🦠 流感监测", "🌤️ 气象数据", "🔍 搜索指数", "📊 相关性分析"])
-    
-    with tab1:
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
-        
-        if 'ili_rate' in df.columns:
-            fig.add_trace(go.Scatter(
-                x=df['date'], y=df['ili_rate'],
-                name='ILI 率 (%)', line=dict(color='#E53935', width=2),
-                fill='tozeroy', fillcolor='rgba(229, 57, 53, 0.1)'
-            ), secondary_y=False)
-        
-        if 'positive_rate' in df.columns:
-            fig.add_trace(go.Scatter(
-                x=df['date'], y=df['positive_rate'],
-                name='阳性率 (%)', line=dict(color='#AB47BC', width=1.5, dash='dot')
-            ), secondary_y=True)
-        
-        fig.update_layout(
-            title='流感监测数据时序趋势',
-            height=450,
-            template='plotly_white',
-            hovermode='x unified',
-            legend=dict(orientation='h', yanchor='bottom', y=1.02),
-        )
-        fig.update_yaxes(title_text="ILI 率 (%)", secondary_y=False)
-        fig.update_yaxes(title_text="阳性率 (%)", secondary_y=True)
-        st.plotly_chart(fig, width="stretch")
-    
-    with tab2:
-        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08)
-        
-        if 'temperature' in df.columns:
-            fig.add_trace(go.Scatter(
-                x=df['date'], y=df['temperature'],
-                name='温度 (°C)', line=dict(color='#FF7043', width=1.5),
-                fill='tozeroy', fillcolor='rgba(255, 112, 67, 0.1)'
-            ), row=1, col=1)
-        
-        if 'humidity' in df.columns:
-            fig.add_trace(go.Scatter(
-                x=df['date'], y=df['humidity'],
-                name='湿度 (%)', line=dict(color='#42A5F5', width=1.5),
-                fill='tozeroy', fillcolor='rgba(66, 165, 245, 0.1)'
-            ), row=2, col=1)
-        
-        fig.update_layout(
-            title='气象数据时序趋势',
-            height=500,
-            template='plotly_white',
-            hovermode='x unified',
-        )
-        st.plotly_chart(fig, width="stretch")
-    
-    with tab3:
-        fig = go.Figure()
-        search_info = [
-            ('flu_search_index', '流感搜索指数', '#26A69A'),
-            ('cold_search_index', '感冒搜索指数', '#7E57C2'),
-            ('fever_search_index', '发烧搜索指数', '#FFA726'),
-        ]
-        for col, name, color in search_info:
+@st.cache_data
+def load_predictions() -> pd.DataFrame:
+    path = REPORTS_DIR / "test_predictions.csv"
+    if path.exists():
+        df = pd.read_csv(path)
+        for col in ["anchor_date", "target_date"]:
             if col in df.columns:
-                fig.add_trace(go.Scatter(
-                    x=df['date'], y=df[col],
-                    name=name, line=dict(color=color, width=1.5)
-                ))
-        
-        fig.update_layout(
-            title='搜索指数时序趋势',
-            height=400,
-            template='plotly_white',
-            hovermode='x unified',
-        )
-        st.plotly_chart(fig, width="stretch")
-    
-    with tab4:
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        exclude = ['year', 'week']
-        plot_cols = [c for c in numeric_cols if c not in exclude][:10]
-        
-        if plot_cols:
-            corr = df[plot_cols].corr()
-            fig = px.imshow(
-                corr, text_auto='.2f',
-                color_continuous_scale='RdBu_r',
-                aspect='auto',
-                title='特征相关性矩阵',
-                zmin=-1, zmax=1,
-            )
-            fig.update_layout(height=600)
-            st.plotly_chart(fig, width="stretch")
-    
-    # 原始数据表
-    with st.expander("📋 查看原始数据"):
-        st.dataframe(df.head(50), width="stretch")
+                df[col] = pd.to_datetime(df[col])
+        return df
+    return pd.DataFrame()
 
 
-def render_model_training():
-    """模型训练页面"""
-    st.markdown("## 🧠 模型训练")
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col2:
-        st.markdown("### 训练控制")
-        model_choice = st.selectbox("选择模型", 
-                                      ["全部模型", "iTransformer", "LSTM", "DLinear", "ARIMA"])
-        debug_mode = st.checkbox("🐛 Debug 模式 (快速验证)", value=True)
-        
-        if st.button("🚀 开始训练", type="primary", width="stretch"):
-            cmd_model = 'all' if model_choice == '全部模型' else model_choice
-            cmd_debug = '--debug' if debug_mode else ''
-            st.code(f"python scripts/train.py --model {cmd_model} {cmd_debug}")
-            st.info("请在终端中运行上述命令开始训练。训练完成后刷新页面查看结果。")
-    
-    with col1:
-        st.markdown("### 训练历史")
-        
-        models_to_show = ['iTransformer', 'LSTM', 'DLinear']
-        tabs = st.tabs(models_to_show)
-        
-        for tab, model_name in zip(tabs, models_to_show):
-            with tab:
-                history = load_training_history(model_name)
-                if history:
-                    fig = make_subplots(
-                        rows=1, cols=2,
-                        subplot_titles=['损失曲线', '学习率']
-                    )
-                    
-                    epochs = list(range(1, len(history['train_loss']) + 1))
-                    
-                    fig.add_trace(go.Scatter(
-                        x=epochs, y=history['train_loss'],
-                        name='训练损失',
-                        line=dict(color='#1976D2', width=2)
-                    ), row=1, col=1)
-                    
-                    fig.add_trace(go.Scatter(
-                        x=epochs, y=history['val_loss'],
-                        name='验证损失',
-                        line=dict(color='#FF7043', width=2)
-                    ), row=1, col=1)
-                    
-                    if 'lr' in history:
-                        fig.add_trace(go.Scatter(
-                            x=epochs, y=history['lr'],
-                            name='学习率',
-                            line=dict(color='#673AB7', width=2)
-                        ), row=1, col=2)
-                    
-                    fig.update_layout(
-                        height=350,
-                        template='plotly_white',
-                        showlegend=True,
-                    )
-                    fig.update_yaxes(type='log', row=1, col=2)
-                    st.plotly_chart(fig, width="stretch")
-                else:
-                    st.info(f"⏳ {model_name} 尚未训练。请先运行训练脚本。")
-
-
-def render_prediction_analysis():
-    """预测分析页面"""
-    st.markdown("## 📈 预测结果分析")
-    
-    metrics = load_metrics()
-    
-    if not metrics:
-        st.warning("⚠️ 尚无预测结果。请先训练模型。")
-        return
-    
-    # 指标展示
-    st.markdown("### 📊 模型性能指标")
-    
-    # 为每个模型创建指标卡片
-    cols = st.columns(len(metrics))
-    for col, (model_name, model_metrics) in zip(cols, metrics.items()):
-        with col:
-            color = COLORS.get(model_name, '#667eea')
-            rmse_val = model_metrics.get('RMSE', 0)
-            mae_val = model_metrics.get('MAE', 0)
-            r2_val = model_metrics.get('R²', 0)
-            
-            st.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid {color};">
-                <div style="font-size: 1.1rem; font-weight: 700; color: {color};">{model_name}</div>
-                <div style="margin-top: 0.5rem;">
-                    <span style="font-size: 0.85rem; color: #666;">RMSE:</span>
-                    <span style="font-size: 1.1rem; font-weight: 600;">{rmse_val:.4f}</span>
-                </div>
-                <div>
-                    <span style="font-size: 0.85rem; color: #666;">MAE:</span>
-                    <span style="font-size: 1.1rem; font-weight: 600;">{mae_val:.4f}</span>
-                </div>
-                <div>
-                    <span style="font-size: 0.85rem; color: #666;">R²:</span>
-                    <span style="font-size: 1.1rem; font-weight: 600;">{r2_val:.4f}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # 预测图表
-    figures_dir = os.path.join(project_root, 'results/figures')
-    
-    tab1, tab2 = st.tabs(["📈 预测对比图", "📊 注意力热力图"])
-    
-    with tab1:
-        for model_name in metrics.keys():
-            img_path = os.path.join(figures_dir, f'{model_name}_predictions.png')
-            if os.path.exists(img_path):
-                st.image(img_path, caption=f'{model_name} 预测结果', width="stretch")
-    
-    with tab2:
-        attn_images = [f for f in os.listdir(figures_dir) 
-                      if f.startswith('attention_heatmap')] if os.path.exists(figures_dir) else []
-        if attn_images:
-            for img in attn_images:
-                st.image(os.path.join(figures_dir, img), 
-                        caption='iTransformer 变量间注意力权重', width="stretch")
-        else:
-            st.info("⏳ 注意力热力图在 iTransformer 训练完成后生成。")
-
-
-def render_comparison():
-    """对比实验页面"""
-    st.markdown("## 🔬 多模型对比实验")
-    
-    metrics = load_metrics()
-    
-    if not metrics:
-        st.warning("⚠️ 尚无实验结果。请先训练所有模型。")
-        return
-    
-    # === 新增：直观的准确率排行榜 ===
-    st.markdown("### 🏆 预测准确率排行榜 (Accuracy)")
-    
-    # 提取并计算各模型的“准确率”：
-    # 因为真实的 MAPE 在拟合流感这类含有很多趋近 0 值的时序时容易导致大百分比偏差，而致使 (1-MAPE) 归零。
-    # 这里直接使用模型解释方差 R² 作为预测准确率（拟合优度）的直观百分比体现。
-    accuracies = []
-    for m in metrics:
-        r2 = metrics[m].get('R²', 0.0)
-        acc = max(0, r2 * 100)  # R² 为 0.72 也就是 72% 准确解释度
-        accuracies.append((m, acc))
-    
-    # 按准确率从高到底排序
-    accuracies.sort(key=lambda x: x[1], reverse=True)
-    
-    # 用醒目的列卡片展示
-    cols = st.columns(len(accuracies))
-    for i, (col, (model_name, acc)) in enumerate(zip(cols, accuracies)):
-        with col:
-            # iTransformer 特殊高亮（如果它是第一名或本身就是主角）
-            if model_name == "iTransformer":
-                bg_color = "linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%)"
-                border = "2px solid #667eea"
-                icon = "👑 " if i == 0 else "✨ "
-            else:
-                bg_color = "rgba(0, 0, 0, 0.02)"
-                border = "1px solid #ddd"
-                icon = ""
-                
-            st.markdown(f"""
-            <div style="background: {bg_color}; border-radius: 10px; border: {border}; padding: 1.5rem 1rem; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 2rem;">
-                <div style="font-size: 1.2rem; font-weight: bold; color: {'#667eea' if model_name=='iTransformer' else '#555'}; margin-bottom: 0.5rem;">
-                    {icon}{model_name}
-                </div>
-                <div style="font-size: 2.2rem; font-weight: 900; color: {'#E53935' if i==0 else '#666'};">
-                    {acc:.1f}%
-                </div>
-                <div style="font-size: 0.8rem; color: #888; margin-top: 0.5rem;">
-                    平均预测准确度
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # 交互式指标对比
-    metric_names = ['RMSE', 'MAE', 'MAPE', 'R²']
-    available_metrics = [m for m in metric_names 
-                        if all(m in metrics[model] for model in metrics)]
-    
-    if available_metrics:
-        selected_metric = st.selectbox("选择对比指标", available_metrics)
-        
-        models = list(metrics.keys())
-        values = [metrics[m][selected_metric] for m in models]
-        colors = [COLORS.get(m, '#999') for m in models]
-        
-        fig = go.Figure(data=[go.Bar(
-            x=models, y=values,
-            marker_color=colors,
-            text=[f'{v:.4f}' for v in values],
-            textposition='outside',
-            textfont=dict(size=14, color='#333'),
-        )])
-        
-        fig.update_layout(
-            title=f'{selected_metric} 指标对比',
-            height=400,
-            template='plotly_white',
-            yaxis_title=selected_metric,
-            showlegend=False,
-        )
-        st.plotly_chart(fig, width="stretch")
-    
-    # 综合对比表格
-    st.markdown("### 📋 综合指标对比表")
-    
-    df_metrics = pd.DataFrame(metrics).T
-    df_metrics.index.name = '模型'
-    
-    # 高亮最佳值
-    st.dataframe(df_metrics.style.format('{:.4f}'), width="stretch")
-    
-    # 雷达图
-    if len(metrics) > 1 and available_metrics:
-        st.markdown("### 🕸️ 雷达图对比")
-        
-        fig = go.Figure()
-        for model_name in metrics:
-            r_values = []
-            for m in available_metrics:
-                val = metrics[model_name].get(m, 0)
-                # 归一化到相似尺度
-                if m == 'R²':
-                    r_values.append(val)
-                else:
-                    # 对误差指标取倒数归一化
-                    r_values.append(1 / (1 + val))
-            
-            fig.add_trace(go.Scatterpolar(
-                r=r_values + [r_values[0]],
-                theta=available_metrics + [available_metrics[0]],
-                name=model_name,
-                line=dict(color=COLORS.get(model_name, '#999'), width=2),
-                fill='toself',
-                opacity=0.3,
-            ))
-        
-        fig.update_layout(
-            polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-            showlegend=True,
-            title='模型综合能力雷达图',
-            height=500,
-        )
-        st.plotly_chart(fig, width="stretch")
-    
-    # 对比图
-    comparison_img = os.path.join(project_root, 'results/figures/model_comparison.png')
-    multi_pred_img = os.path.join(project_root, 'results/figures/multi_model_predictions.png')
-    
-    if os.path.exists(multi_pred_img):
-        st.markdown("### 📈 多模型预测趋势对比")
-        st.image(multi_pred_img, width="stretch")
-
-
-def render_realtime_inference():
-    """🛡️ 实时疫情预警与医疗调度页面"""
-    st.markdown("## 🛡️ 实时疫情预警与调度系统")
-    
-    data = load_data()
-    if 'merged' not in data:
-        st.warning("⚠️ 暂无在线数据，请先训练拉取。")
-        return
-        
-    df = data['merged']
-    
-    # 过滤掉不完整的边缘数据，计算可选的预测“当前节点”集合
-    # 至少需要前 12 周作为历史，后 4 周作为事实验证
-    valid_anchor_indices = range(12, len(df) - 4)
-    valid_dates = df['date'].iloc[list(valid_anchor_indices)].dt.strftime('%Y-%m-%d').tolist()
-    
-    # 交互式时间滑块控制台
-    st.markdown("### 🎛️ 时间轴实验室 (时光机)")
-    st.info("💡 **功能说明**：拖动下方滑块随意穿梭回过去的任意一周。系统将以该周作为“现在”，向您展示当周的自动预警结果，并用盲测的方式与后续真实发生的客观历史对比！")
-    
-    selected_date_str = st.select_slider(
-        "选择触发预警的假想节点视角：",
-        options=valid_dates,
-        value=valid_dates[-1]  # 默认在最新的一个合法节点
-    )
-    
-    # 获取选定时间在 df 中的索引
-    anchor_idx = df.index[df['date'].dt.strftime('%Y-%m-%d') == selected_date_str].tolist()[0]
-    
-    # 提取选定节点的前 12 周（上下文）和后 4 周（事后真实）
-    history_df = df.iloc[anchor_idx - 12 : anchor_idx].copy()
-    true_future_df = df.iloc[anchor_idx : anchor_idx + 4].copy()
-    recent_df = pd.concat([history_df, true_future_df])
-    
-    last_date = history_df['date'].max()
-    
-    # 获取预测日期（即真实的最后四周日期）
-    forecast_dates = true_future_df['date'].tolist()
-    
-    # 模拟 iTransformer 拉取并输出未来推演。为了演示其卓越准确度，使预测轨与真实值高度拟合
-    np.random.seed(42)
-    true_vals = true_future_df['ili_rate'].values
-    preds = [max(0.1, v + np.random.normal(0, v * 0.08)) for v in true_vals]
-    
-    future_df = pd.DataFrame({
-        'date': forecast_dates,
-        'predicted_ili': preds
-    })
-    
-    # === 1. 风险指示灯大屏 ===
-    max_pred = max(preds)
-    
-    # 提取具体时间段字符串
-    start_str = future_df['date'].min().strftime('%Y-%m-%d')
-    end_str = future_df['date'].max().strftime('%Y-%m-%d')
-    time_window = f"【{start_str} 至 {end_str}】"
-    
-    # 设定红绿灯等级
-    if max_pred >= 6.0:
-        alert_level = "🚨 高危爆发预警 (Level 1)"
-        alert_color = "#E53935" # Red
-        alert_bg = "rgba(229, 57, 53, 0.1)"
-        suggestion = f"模型检测到未来四周 {time_window} 内流感具有极高的激增风险，极大概率突破 6% 门槛爆发波峰！**【医疗建议】：** 立即加倍调拨奥司他韦、布洛芬等发热用药至一线社区医院；儿童发热门诊建议启动应急预案增加值班人力；建议疾控中心准备下发少去密闭场所的公共通知。"
-    elif max_pred >= 3.5:
-        alert_level = "⚠️ 波段拉升警戒 (Level 2)"
-        alert_color = "#FF9800" # Orange
-        alert_bg = "rgba(255, 152, 0, 0.1)"
-        suggestion = f"针对即将到来的时间段 {time_window}，近期气象降温及前瞻搜索指数出现异动，流感样病例正在逐渐抬头。\\n\\n**【医疗建议】：** 建议医院盘点呼吸道抗体检测剂库区存量；门诊可按平日 1.5 倍准备呼吸科接诊安排；关注重点托幼机构的晨检数据网络直报。"
-    else:
-        alert_level = "✅ 疫情平稳期 (Level 3)"
-        alert_color = "#4CAF50" # Green
-        alert_bg = "rgba(76, 175, 80, 0.1)"
-        suggestion = f"模型测算针对未来四周 {time_window} 未见明显波峰信号，总体感染趋势平稳甚至下降。\\n\\n**【医疗建议】：** 维持常规接诊级别，可安排常规的当季流感疫苗宣传宣教活动；发热病床资源可释放给其他科室使用。"
-
-    # 渲染指示灯模块
-    st.markdown(f"""
-    <div style="background-color: {alert_bg}; border-left: 8px solid {alert_color}; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
-        <h2 style="color: {alert_color}; margin-top: 0; font-size: 1.8rem; font-weight: 900;">{alert_level}</h2>
-        <div style="font-size: 2.5rem; font-weight: 700; margin-bottom: 1rem; color: #333;">
-            峰值推演: <span style="color: {alert_color};">{max_pred:.2f}%</span> ILI
-        </div>
-        <p style="font-size: 1.05rem; line-height: 1.6; color: #444;">
-            {suggestion}
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # === 2. 沉浸式预测画板（后视镜与探照灯） ===
-    st.markdown("### 📊 近期预警复盘与实录对比 (Backtest)")
-    
-    fig = go.Figure()
-    
-    # 历史真实实线（作为输入的过去）
-    fig.add_trace(go.Scatter(
-        x=history_df['date'], y=history_df['ili_rate'],
-        mode='lines+markers', name='历史真实监测 (Context)',
-        line=dict(color='#667eea', width=3),
-        marker=dict(size=8)
-    ))
-    
-    # 未来预测虚线
-    combined_date = [history_df['date'].iloc[-1]] + list(future_df['date'])
-    combined_val = [history_df['ili_rate'].iloc[-1]] + list(future_df['predicted_ili'])
-    
-    fig.add_trace(go.Scatter(
-        x=combined_date, y=combined_val,
-        mode='lines+markers', name='iTransformer 预警轨迹',
-        line=dict(color='#E53935', width=3, dash='dash'),
-        marker=dict(size=8, symbol='star', color='#E53935')
-    ))
-    
-    # 事后真实值（揭晓答案）
-    true_combined_date = [history_df['date'].iloc[-1]] + list(true_future_df['date'])
-    true_combined_val = [history_df['ili_rate'].iloc[-1]] + list(true_future_df['ili_rate'])
-    
-    fig.add_trace(go.Scatter(
-        x=true_combined_date, y=true_combined_val,
-        mode='lines+markers', name='事后实际发生值 (Actual)',
-        line=dict(color='#4CAF50', width=2.5),
-        marker=dict(size=6, symbol='square-open', color='#4CAF50')
-    ))
-    
-    # 渲染置信区间缓冲带
-    upper_bound = [v * 1.15 for v in combined_val[1:]]
-    lower_bound = [v * 0.85 for v in combined_val[1:]]
-    
-    fig.add_trace(go.Scatter(
-        name='预测置信区间',
-        x=list(future_df['date']) + list(future_df['date'])[::-1],
-        y=upper_bound + lower_bound[::-1],
-        fill='toself',
-        fillcolor='rgba(229, 57, 53, 0.15)',
-        line=dict(color='rgba(255,255,255,0)'),
-        hoverinfo="skip"
-    ))
-    
-    # 时间分割线（模拟触发预警的节点）
-    fig.add_vline(x=last_date, line_width=2, line_dash="dash", line_color="gray")
-    fig.add_annotation(x=last_date, y=max_pred, text="触发预警节点", showarrow=True, arrowhead=1)
-
-    fig.update_layout(
-        height=450,
-        template='plotly_white',
-        hovermode='x unified',
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    
-    st.plotly_chart(fig, width="stretch")
-
-
-def render_settings():
-    """系统设置页面"""
-    st.markdown("## ⚙️ 系统设置")
-    
-    import yaml
-    
-    config_path = os.path.join(project_root, 'config/config.yaml')
-    
-    if os.path.exists(config_path):
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### 📐 模型参数")
-            
-            itrans_cfg = config.get('model', {}).get('itransformer', {})
-            st.markdown("**iTransformer**")
-            st.json(itrans_cfg)
-            
-            lstm_cfg = config.get('model', {}).get('lstm', {})
-            st.markdown("**LSTM**")
-            st.json(lstm_cfg)
-        
-        with col2:
-            st.markdown("### 🏋️ 训练参数")
-            train_cfg = config.get('training', {})
-            st.json(train_cfg)
-            
-            st.markdown("### 📊 数据参数")
-            data_cfg = config.get('data', {})
-            st.json(data_cfg)
-    
-    # GPU 信息
-    st.markdown("### 🖥️ 硬件环境")
+def fmt_num(value: Any, digits: int = 3) -> str:
+    if value is None:
+        return "暂无"
     try:
-        import torch
-        if torch.cuda.is_available():
-            st.success(f"✅ GPU: {torch.cuda.get_device_name(0)}")
-            st.info(f"📦 显存: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.1f} GB")
-            st.info(f"🔥 CUDA: {torch.version.cuda}")
+        if pd.isna(value):
+            return "暂无"
+        return f"{float(value):.{digits}f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def fmt_date(value: Any, fmt: str = "%Y-%m-%d") -> str:
+    if value is None or pd.isna(value):
+        return "暂无"
+    return pd.to_datetime(value).strftime(fmt)
+
+
+def metric_value(metrics: dict[str, dict[str, float]], model: str, key: str) -> float | None:
+    value = metrics.get(model, {}).get(key)
+    if value is None and key == "R2":
+        value = metrics.get(model, {}).get("R²")
+    return value
+
+
+def best_model(metrics: dict[str, dict[str, float]], key: str, higher_is_better: bool) -> tuple[str, float] | None:
+    rows = []
+    for model, vals in metrics.items():
+        value = vals.get(key, vals.get("R²") if key == "R2" else None)
+        if value is not None and not pd.isna(value):
+            rows.append((model, float(value)))
+    if not rows:
+        return None
+    return sorted(rows, key=lambda item: item[1], reverse=higher_is_better)[0]
+
+
+def kpi_card(label: str, value: str, note: str, color: str = "#2563EB") -> None:
+    st.markdown(
+        f"""
+        <div class="kpi-card" style="border-top: 4px solid {color};">
+            <div class="kpi-label">{label}</div>
+            <div class="kpi-value">{value}</div>
+            <div class="kpi-note">{note}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def story_card(index: int, title: str, text: str) -> None:
+    st.markdown(
+        f"""
+        <div class="story-card">
+            <div class="story-index">{index}</div>
+            <div class="story-title">{title}</div>
+            <div class="story-text">{text}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_title() -> None:
+    st.markdown(
+        """
+        <div class="top-band">
+            <div class="eyebrow">毕业设计答辩展示 · 多源时序预测</div>
+            <div class="page-title">基于深度学习和多元数据的流感爆发趋势预测</div>
+            <p class="page-subtitle">
+                研究对象为中国国家流感中心北方省份周度 ILI% 监测序列，融合气象与搜索指数，
+                对未来 4 周流感活动趋势进行预测，并用 ARIMA、DLinear、LSTM 等基线模型进行验证。
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_sidebar() -> str:
+    summary = load_experiment_summary()
+    audit = load_audit()
+
+    with st.sidebar:
+        st.markdown("### 展示导航")
+        page = st.radio(
+            "选择内容",
+            ["答辩总览", "数据与特征", "模型结果", "预警复盘", "附录信息"],
+            label_visibility="collapsed",
+        )
+
+        st.markdown("---")
+        st.markdown("### 研究口径")
+        st.caption("中国北方省份真实周度流感监测序列")
+        st.markdown("**目标变量**：`ili_rate`")
+        st.markdown("**预测任务**：输入 16 周，预测未来 4 周")
+
+        if summary.get("split_metadata"):
+            meta = summary["split_metadata"]
+            st.markdown("**训练/验证/测试**")
+            st.caption(f"{meta.get('train_rows', 'n/a')} / {meta.get('val_rows', 'n/a')} / {meta.get('test_rows', 'n/a')} 条窗口样本")
+
+        if audit:
+            st.markdown("**数据覆盖**")
+            st.caption(f"{audit.get('feature_engineered_date_start', 'n/a')} 至 {audit.get('feature_engineered_date_end', 'n/a')}")
+
+        st.markdown("---")
+        st.markdown("### 答辩讲法")
+        st.caption("先讲数据口径，再讲方法设计，随后展示模型优于基线，最后说明预警流程与局限。")
+
+    return page
+
+
+def get_target_df() -> tuple[pd.DataFrame | None, str]:
+    data = load_data()
+    if "featured" in data:
+        df = data["featured"].copy()
+    elif "merged" in data:
+        df = data["merged"].copy()
+    else:
+        return None, "ili_rate"
+    target_col = "ili_rate" if "ili_rate" in df.columns else df.select_dtypes(include=[np.number]).columns[0]
+    return df, target_col
+
+
+def make_signal_chart(df: pd.DataFrame, target_col: str) -> go.Figure:
+    plot_df = df[["date", target_col]].dropna().copy()
+    plot_df["rolling_8w"] = plot_df[target_col].rolling(8, min_periods=2).mean()
+    high_threshold = plot_df[target_col].quantile(0.85)
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=plot_df["date"],
+            y=plot_df[target_col],
+            name="周度 ILI%",
+            mode="lines",
+            line=dict(color="#111827", width=1.6),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=plot_df["date"],
+            y=plot_df["rolling_8w"],
+            name="8周滑动均值",
+            mode="lines",
+            line=dict(color="#2563EB", width=2.6),
+        )
+    )
+    fig.add_hline(
+        y=high_threshold,
+        line_dash="dash",
+        line_color="#DC2626",
+        annotation_text="历史85分位",
+        annotation_position="top left",
+    )
+    fig.update_layout(
+        height=430,
+        margin=dict(l=10, r=10, t=45, b=10),
+        title="真实监测趋势：季节性波动与高位周可直接辨认",
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        yaxis_title=TARGET_LABEL,
+        xaxis_title="",
+    )
+    return fig
+
+
+def make_prediction_chart(preds: pd.DataFrame, horizon: int = 1, models: list[str] | None = None) -> go.Figure:
+    models = models or ["iTransformer", "ARIMA", "DLinear", "LSTM"]
+    if preds.empty:
+        return go.Figure()
+
+    plot_df = preds[preds["horizon"] == horizon].sort_values("target_date").copy()
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=plot_df["target_date"],
+            y=plot_df["actual"],
+            name="真实值",
+            line=dict(color=MODEL_COLORS["Actual"], width=2.8),
+        )
+    )
+    for model in models:
+        if model in plot_df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=plot_df["target_date"],
+                    y=plot_df[model],
+                    name=model,
+                    line=dict(color=MODEL_COLORS.get(model, "#64748B"), width=2),
+                )
+            )
+    fig.update_layout(
+        height=420,
+        margin=dict(l=10, r=10, t=45, b=10),
+        title=f"测试集预测对比：提前 {horizon} 周预测",
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        yaxis_title=TARGET_LABEL,
+        xaxis_title="",
+    )
+    return fig
+
+
+def metrics_frame(metrics: dict[str, dict[str, float]]) -> pd.DataFrame:
+    if not metrics:
+        return pd.DataFrame()
+    df = pd.DataFrame(metrics).T
+    keep = [c for c in ["RMSE", "MAE", "MAPE", "R2", "peak_hit_rate", "peak_value_error"] if c in df.columns]
+    df = df[keep].copy()
+    df.index.name = "模型"
+    return df
+
+
+def make_metric_bar(metrics: dict[str, dict[str, float]], metric: str) -> go.Figure:
+    rows = []
+    for model in MODEL_ORDER:
+        value = metric_value(metrics, model, metric)
+        if value is not None:
+            rows.append((model, float(value)))
+    if not rows:
+        return go.Figure()
+    if metric in {"RMSE", "MAE", "MAPE", "peak_value_error"}:
+        rows.sort(key=lambda item: item[1])
+    else:
+        rows.sort(key=lambda item: item[1], reverse=True)
+
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=[r[0] for r in rows],
+                y=[r[1] for r in rows],
+                marker_color=[MODEL_COLORS.get(r[0], "#64748B") for r in rows],
+                text=[fmt_num(r[1], 3) for r in rows],
+                textposition="outside",
+            )
+        ]
+    )
+    fig.update_layout(
+        height=330,
+        template="plotly_white",
+        margin=dict(l=10, r=10, t=35, b=10),
+        title=f"{metric} 指标对比",
+        yaxis_title=metric,
+        showlegend=False,
+    )
+    return fig
+
+
+def make_horizon_chart(horizon: dict[str, dict[str, float]], metric: str = "RMSE") -> go.Figure:
+    fig = go.Figure()
+    for model in MODEL_ORDER:
+        values = []
+        for h in range(1, 5):
+            values.append(horizon.get(model, {}).get(f"H{h}_{metric}"))
+        if any(v is not None for v in values):
+            fig.add_trace(
+                go.Scatter(
+                    x=["H1", "H2", "H3", "H4"],
+                    y=values,
+                    name=model,
+                    mode="lines+markers",
+                    line=dict(color=MODEL_COLORS.get(model, "#64748B"), width=2.4),
+                )
+            )
+    fig.update_layout(
+        height=350,
+        template="plotly_white",
+        margin=dict(l=10, r=10, t=35, b=10),
+        title=f"预测步长稳定性：{metric}",
+        yaxis_title=metric,
+        xaxis_title="预测步长",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
+def make_ablation_chart(ablation: pd.DataFrame) -> go.Figure:
+    if ablation.empty:
+        return go.Figure()
+    plot_df = ablation.sort_values("RMSE").copy()
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(
+        go.Bar(
+            x=plot_df["label"],
+            y=plot_df["RMSE"],
+            name="RMSE",
+            marker_color="#2563EB",
+            text=[fmt_num(v, 3) for v in plot_df["RMSE"]],
+            textposition="outside",
+        ),
+        secondary_y=False,
+    )
+    if "peak_value_error" in plot_df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=plot_df["label"],
+                y=plot_df["peak_value_error"],
+                name="峰值幅度误差",
+                mode="lines+markers",
+                line=dict(color="#DC2626", width=2.6),
+            ),
+            secondary_y=True,
+        )
+    fig.update_layout(
+        height=360,
+        template="plotly_white",
+        margin=dict(l=10, r=10, t=35, b=10),
+        title="消融实验：不同数据源组合的贡献",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    fig.update_yaxes(title_text="RMSE", secondary_y=False)
+    fig.update_yaxes(title_text="峰值幅度误差", secondary_y=True)
+    return fig
+
+
+def render_overview() -> None:
+    df, target_col = get_target_df()
+    metrics = load_metrics()
+    summary = load_experiment_summary()
+    audit = load_audit()
+    preds = load_predictions()
+    ablation = load_ablation()
+
+    if df is None:
+        st.warning("尚未找到处理后的数据，请先运行 `python scripts/train.py --skip-collect`。")
+        return
+
+    best_rmse = best_model(metrics, "RMSE", higher_is_better=False)
+    best_r2 = best_model(metrics, "R2", higher_is_better=True)
+    meta = summary.get("split_metadata", {})
+    latest = df.dropna(subset=[target_col]).sort_values("date").iloc[-1]
+    recent = df.dropna(subset=[target_col]).tail(4)[target_col].mean()
+    previous = df.dropna(subset=[target_col]).tail(8).head(4)[target_col].mean()
+    delta = recent - previous if not pd.isna(previous) else np.nan
+
+    cols = st.columns(4)
+    with cols[0]:
+        kpi_card(
+            "数据跨度",
+            f"{fmt_date(df['date'].min(), '%Y-%m')} 至 {fmt_date(df['date'].max(), '%Y-%m')}",
+            f"合并周度样本 {len(df)} 条，特征工程后 {audit.get('feature_engineered_rows', meta.get('rows', 'n/a'))} 条。",
+            "#2563EB",
+        )
+    with cols[1]:
+        kpi_card(
+            "预测任务",
+            "16周输入 -> 4周输出",
+            "面向答辩展示的短期趋势预测，既看误差，也看峰值识别。",
+            "#16A34A",
+        )
+    with cols[2]:
+        if best_rmse:
+            kpi_card(
+                "综合误差最优",
+                f"{best_rmse[0]}",
+                f"RMSE={fmt_num(best_rmse[1], 3)}；R2最优为 {best_r2[0] if best_r2 else '暂无'}。",
+                "#9333EA",
+            )
         else:
-            st.warning("⚠️ CUDA 不可用，将使用 CPU 训练")
-        st.info(f"🐍 PyTorch: {torch.__version__}")
-    except ImportError:
-        st.error("❌ PyTorch 未安装")
+            kpi_card("综合误差最优", "暂无结果", "训练完成后自动读取评估指标。", "#9333EA")
+    with cols[3]:
+        kpi_card(
+            "最新监测值",
+            f"{fmt_num(latest[target_col], 2)}%",
+            f"{fmt_date(latest['date'])}；近4周较前4周 {'+' if delta >= 0 else ''}{fmt_num(delta, 2)}。",
+            "#D97706",
+        )
+
+    st.markdown('<div class="section-title">答辩主线</div>', unsafe_allow_html=True)
+    s1, s2, s3, s4 = st.columns(4)
+    with s1:
+        story_card(1, "真实数据口径", "统一采用国家流感中心北方省份周度 ILI%，研究对象清晰可追溯。")
+    with s2:
+        story_card(2, "多源特征融合", "历史流感、气象、搜索指数与季节性特征共同进入模型。")
+    with s3:
+        story_card(3, "iTransformer 建模", "把变量当作 token，学习变量间关联，输出未来 4 周趋势。")
+    with s4:
+        story_card(4, "基线与消融验证", "与 ARIMA、DLinear、LSTM 对比，并解释数据源组合的边界。")
+
+    st.markdown('<div class="section-title">核心图表</div>', unsafe_allow_html=True)
+    left, right = st.columns([1.55, 1])
+    with left:
+        st.plotly_chart(make_signal_chart(df, target_col), use_container_width=True)
+    with right:
+        rmse_text = "暂无"
+        r2_text = "暂无"
+        if "iTransformer" in metrics:
+            rmse_text = fmt_num(metric_value(metrics, "iTransformer", "RMSE"), 3)
+            r2_text = fmt_num(metric_value(metrics, "iTransformer", "R2"), 3)
+        st.markdown(
+            f"""
+            <div class="verdict">
+                <span class="status-pill pill-blue">一句话结论</span>
+                <p><strong>本系统能基于真实周度 ILI% 数据完成未来 4 周流感活动趋势预测。</strong></p>
+                <p>当前实验中，iTransformer 在多模型综合误差上表现较优：RMSE={rmse_text}，R2={r2_text}。</p>
+                <p>消融结果显示，多源融合对峰值幅度误差更友好；仅历史流感序列在 RMSE 上也很强，说明目标序列自相关是主要信息来源。</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if audit:
+            st.markdown("")
+            st.markdown(
+                f"""
+                <div class="note-box">
+                    <strong>数据质量说明：</strong> 原始周报 {audit.get('flu_rows', 'n/a')} 行，
+                    ILI% 缺失 {audit.get('missing_ili_rate_rows', 'n/a')} 周；
+                    搜索指数覆盖 {audit.get('search_region_count_summary', {}).get('flu_search_index_region_count', {}).get('min', 'n/a')}
+                    个北方代表地区。该说明适合答辩时主动回应数据可信度问题。
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    if not preds.empty:
+        st.plotly_chart(make_prediction_chart(preds, horizon=1, models=["iTransformer", "ARIMA", "DLinear"]), use_container_width=True)
+
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.plotly_chart(make_metric_bar(metrics, "RMSE"), use_container_width=True)
+    with c2:
+        if not ablation.empty:
+            st.plotly_chart(make_ablation_chart(ablation), use_container_width=True)
+        else:
+            st.info("暂无消融实验结果。")
 
 
-# ====================================================================
-# 主应用
-# ====================================================================
-def main():
-    render_header()
+def render_data_story() -> None:
+    df, target_col = get_target_df()
+    audit = load_audit()
+
+    if df is None:
+        st.warning("尚未找到处理后的数据。")
+        return
+
+    st.markdown('<div class="section-title">数据来源与处理链路</div>', unsafe_allow_html=True)
+    cols = st.columns(3)
+    with cols[0]:
+        kpi_card("流感主序列", "国家流感中心周报", "北方省份周度 ILI%，作为唯一预测目标。", "#2563EB")
+    with cols[1]:
+        kpi_card("气象外生变量", "8个代表城市", "温度、湿度、风速、气压按周聚合。", "#16A34A")
+    with cols[2]:
+        kpi_card("搜索行为变量", "3个关键词", "流感、感冒、发烧搜索指数聚合。", "#D97706")
+
+    c1, c2 = st.columns([1.4, 1])
+    with c1:
+        st.plotly_chart(make_signal_chart(df, target_col), use_container_width=True)
+    with c2:
+        st.markdown('<div class="section-title">数据审计</div>', unsafe_allow_html=True)
+        if audit:
+            audit_rows = pd.DataFrame(
+                [
+                    ("原始流感周报行数", audit.get("flu_rows")),
+                    ("周报解析完整/部分", f"{audit.get('parse_status_counts', {}).get('ok', 'n/a')} / {audit.get('parse_status_counts', {}).get('partial', 'n/a')}"),
+                    ("ILI% 缺失周数", audit.get("missing_ili_rate_rows")),
+                    ("周度合并样本", audit.get("merged_rows")),
+                    ("特征工程样本", audit.get("feature_engineered_rows")),
+                    ("气象日度记录", audit.get("weather_rows")),
+                    ("搜索指数日度记录", audit.get("search_rows")),
+                ],
+                columns=["项目", "数值"],
+            )
+            audit_rows["数值"] = audit_rows["数值"].astype(str)
+            st.dataframe(audit_rows, hide_index=True, use_container_width=True)
+        else:
+            st.info("未找到数据审计报告。")
+
+    st.markdown('<div class="section-title">特征相关性</div>', unsafe_allow_html=True)
+    numeric = df.select_dtypes(include=[np.number]).copy()
+    prefer = [
+        target_col,
+        "temperature",
+        "humidity",
+        "wind_speed",
+        "pressure",
+        "flu_search_index",
+        "cold_search_index",
+        "fever_search_index",
+        "is_flu_season",
+    ]
+    cols = [c for c in prefer if c in numeric.columns]
+    if len(cols) >= 2:
+        corr = numeric[cols].corr()
+        fig = go.Figure(
+            data=go.Heatmap(
+                z=corr.values,
+                x=corr.columns,
+                y=corr.index,
+                colorscale="RdBu",
+                zmin=-1,
+                zmax=1,
+                text=np.round(corr.values, 2),
+                texttemplate="%{text}",
+                hovertemplate="%{y} vs %{x}<br>相关系数=%{z:.2f}<extra></extra>",
+            )
+        )
+        fig.update_layout(height=470, template="plotly_white", margin=dict(l=10, r=10, t=20, b=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("查看处理后数据前 30 行"):
+        st.dataframe(df.head(30), use_container_width=True, hide_index=True)
+
+
+def render_model_results() -> None:
+    metrics = load_metrics()
+    horizon = load_horizon_metrics()
+    preds = load_predictions()
+    ablation = load_ablation()
+
+    if not metrics:
+        st.warning("尚未找到模型评估结果，请先运行训练脚本。")
+        return
+
+    st.markdown('<div class="section-title">模型指标总览</div>', unsafe_allow_html=True)
+    mdf = metrics_frame(metrics)
+    if not mdf.empty:
+        st.dataframe(
+            mdf.style.format("{:.4f}"),
+            use_container_width=True,
+        )
+
+    left, right = st.columns(2)
+    with left:
+        st.plotly_chart(make_metric_bar(metrics, "RMSE"), use_container_width=True)
+    with right:
+        st.plotly_chart(make_metric_bar(metrics, "R2"), use_container_width=True)
+
+    st.markdown('<div class="section-title">预测步长表现</div>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.plotly_chart(make_horizon_chart(horizon, "RMSE"), use_container_width=True)
+    with c2:
+        st.plotly_chart(make_horizon_chart(horizon, "MAPE"), use_container_width=True)
+
+    st.markdown('<div class="section-title">测试集预测曲线</div>', unsafe_allow_html=True)
+    if not preds.empty:
+        horizon_choice = st.radio(
+            "预测提前周数",
+            options=[1, 2, 3, 4],
+            format_func=lambda x: f"提前{x}周",
+            horizontal=True,
+        )
+        st.plotly_chart(make_prediction_chart(preds, int(horizon_choice)), use_container_width=True)
+    else:
+        st.info("未找到测试集预测明细。")
+
+    st.markdown('<div class="section-title">消融实验解释</div>', unsafe_allow_html=True)
+    if not ablation.empty:
+        c3, c4 = st.columns([1.2, 1])
+        with c3:
+            st.plotly_chart(make_ablation_chart(ablation), use_container_width=True)
+        with c4:
+            show_cols = [c for c in ["label", "feature_count", "RMSE", "MAE", "MAPE", "R2", "peak_value_error"] if c in ablation.columns]
+            st.dataframe(
+                ablation[show_cols].sort_values("RMSE").style.format(
+                    {"RMSE": "{:.4f}", "MAE": "{:.4f}", "MAPE": "{:.2f}", "R2": "{:.4f}", "peak_value_error": "{:.4f}"}
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+        st.markdown(
+            """
+            <div class="note-box">
+                答辩时建议如实说明：历史流感序列本身解释力很强；引入气象与搜索指数后，
+                对峰值幅度识别更有价值，但在当前样本规模下未必让所有误差指标同时最优。
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("未找到消融实验结果。")
+
+
+def risk_thresholds(df: pd.DataFrame, target_col: str) -> tuple[float, float]:
+    values = df[target_col].dropna()
+    if values.empty:
+        return 0.0, 0.0
+    return float(values.quantile(0.70)), float(values.quantile(0.85))
+
+
+def render_warning_review() -> None:
+    df, target_col = get_target_df()
+    preds = load_predictions()
+
+    if df is None or preds.empty:
+        st.warning("需要处理后数据和 `test_predictions.csv` 才能展示预警复盘。")
+        return
+
+    anchor_dates = sorted(preds["anchor_date"].dropna().unique())
+    selected_anchor = st.select_slider(
+        "选择一个历史时点，模拟当周做出的未来4周判断",
+        options=[pd.Timestamp(d).strftime("%Y-%m-%d") for d in anchor_dates],
+        value=pd.Timestamp(anchor_dates[-1]).strftime("%Y-%m-%d"),
+    )
+    anchor = pd.to_datetime(selected_anchor)
+    review = preds[preds["anchor_date"] == anchor].sort_values("horizon").copy()
+
+    watch, high = risk_thresholds(df, target_col)
+    forecast_max = float(review["iTransformer"].max()) if "iTransformer" in review else float(review["actual"].max())
+    actual_max = float(review["actual"].max())
+
+    if forecast_max >= high:
+        label = "高位预警"
+        pill = "pill-red"
+        advice = "预测值进入历史高位区间，答辩演示中可说明系统会提示加强监测与资源预案。"
+    elif forecast_max >= watch:
+        label = "关注上升"
+        pill = "pill-amber"
+        advice = "预测值处于历史偏高区间，适合展示提前关注和连续复核流程。"
+    else:
+        label = "总体平稳"
+        pill = "pill-green"
+        advice = "预测值未进入高位区间，适合说明系统并非只会报高风险，也能给出低风险判断。"
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        kpi_card("模拟预警时点", fmt_date(anchor), "仅使用该时点之前的历史窗口进行演示。", "#2563EB")
+    with c2:
+        kpi_card("未来4周预测峰值", f"{fmt_num(forecast_max, 2)}%", f"历史70/85分位阈值：{fmt_num(watch, 2)} / {fmt_num(high, 2)}。", "#D97706")
+    with c3:
+        kpi_card("事后真实峰值", f"{fmt_num(actual_max, 2)}%", "用于答辩现场说明回测验证方式。", "#16A34A")
+
+    st.markdown(
+        f"""
+        <div class="verdict">
+            <span class="status-pill {pill}">{label}</span>
+            <p><strong>{advice}</strong></p>
+            <p>阈值来自当前真实监测序列的历史分位数，避免使用病例量级阈值解释 ILI%。</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    history = df[(df["date"] <= anchor)].dropna(subset=[target_col]).tail(16)
+    if history.empty:
+        st.warning("该预警时点之前没有足够的历史观测值。")
+        return
+
+    start_date = history["date"].iloc[-1]
+    start_value = float(history[target_col].iloc[-1])
+    future_dates = [start_date] + review["target_date"].tolist()
+    predicted_values = [start_value] + review["iTransformer"].tolist()
+    actual_values = [start_value] + review["actual"].tolist()
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=history["date"],
+            y=history[target_col],
+            name="输入历史窗口",
+            mode="lines+markers",
+            line=dict(color="#111827", width=2.2),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=future_dates,
+            y=predicted_values,
+            name="iTransformer 预测",
+            mode="lines+markers",
+            line=dict(color="#2563EB", width=2.8, dash="dash"),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=future_dates,
+            y=actual_values,
+            name="事后真实值",
+            mode="lines+markers",
+            line=dict(color="#16A34A", width=2.5),
+        )
+    )
+    fig.add_vline(x=anchor, line_color="#667085", line_dash="dash")
+    fig.add_hline(y=watch, line_color="#D97706", line_dash="dot", annotation_text="70分位")
+    fig.add_hline(y=high, line_color="#DC2626", line_dash="dot", annotation_text="85分位")
+    fig.update_layout(
+        height=460,
+        template="plotly_white",
+        title="历史回测式预警复盘：预测曲线与事后真实值对照",
+        margin=dict(l=10, r=10, t=45, b=10),
+        yaxis_title=TARGET_LABEL,
+        xaxis_title="",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("查看该时点未来4周明细"):
+        show_cols = [c for c in ["horizon", "anchor_date", "target_date", "actual", "iTransformer", "ARIMA", "DLinear", "LSTM"] if c in review.columns]
+        st.dataframe(review[show_cols], use_container_width=True, hide_index=True)
+
+
+def render_appendix() -> None:
+    summary = load_experiment_summary()
+    audit = load_audit()
+
+    st.markdown('<div class="section-title">实验配置摘要</div>', unsafe_allow_html=True)
+    meta = summary.get("split_metadata", {})
+    rows = pd.DataFrame(
+        [
+            ("随机种子", summary.get("random_seed", "n/a")),
+            ("目标变量", summary.get("target_col", "ili_rate")),
+            ("特征数量", summary.get("num_variables", meta.get("feature_count", "n/a"))),
+            ("输入窗口", meta.get("lookback_window", "n/a")),
+            ("预测步长", meta.get("forecast_horizon", "n/a")),
+            ("训练集时间", f"{meta.get('train_date_range', {}).get('start', 'n/a')} 至 {meta.get('train_date_range', {}).get('end', 'n/a')}"),
+            ("验证集时间", f"{meta.get('val_date_range', {}).get('start', 'n/a')} 至 {meta.get('val_date_range', {}).get('end', 'n/a')}"),
+            ("测试集时间", f"{meta.get('test_date_range', {}).get('start', 'n/a')} 至 {meta.get('test_date_range', {}).get('end', 'n/a')}"),
+        ],
+        columns=["项目", "内容"],
+    )
+    rows["内容"] = rows["内容"].astype(str)
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+
+    st.markdown('<div class="section-title">答辩可引用说明</div>', unsafe_allow_html=True)
+    note = summary.get(
+        "interpretation_note",
+        "当前研究口径为中国国家流感中心北方省份真实周度 ILI% 监测序列，不应外推为单一城市病例预测结论。",
+    )
+    st.markdown(f'<div class="note-box">{note}</div>', unsafe_allow_html=True)
+
+    if audit:
+        st.markdown('<div class="section-title">数据审计 JSON</div>', unsafe_allow_html=True)
+        st.json(audit)
+
+    st.markdown('<div class="section-title">已生成图表文件</div>', unsafe_allow_html=True)
+    figure_files = sorted([p.name for p in FIGURES_DIR.glob("*.png")]) if FIGURES_DIR.exists() else []
+    if figure_files:
+        st.dataframe(pd.DataFrame({"文件名": figure_files}), use_container_width=True, hide_index=True)
+    else:
+        st.info("暂无图表文件。")
+
+
+def main() -> None:
+    render_title()
     page = render_sidebar()
-    
-    if page == "📊 数据总览":
-        render_data_overview()
-    elif page == "🧠 模型训练":
-        render_model_training()
-    elif page == "📈 预测分析":
-        render_prediction_analysis()
-    elif page == "🔬 对比实验":
-        render_comparison()
-    elif page == "🛡️ 预警与调度":
-        render_realtime_inference()
-    elif page == "⚙️ 系统设置":
-        render_settings()
+
+    if page == "答辩总览":
+        render_overview()
+    elif page == "数据与特征":
+        render_data_story()
+    elif page == "模型结果":
+        render_model_results()
+    elif page == "预警复盘":
+        render_warning_review()
+    elif page == "附录信息":
+        render_appendix()
 
 
 if __name__ == "__main__":

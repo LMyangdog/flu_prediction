@@ -1,0 +1,163 @@
+{
+  "config_path": "config/config.yaml",
+  "model": "all",
+  "random_seed": 42,
+  "target_col": "ili_rate",
+  "feature_cols": [
+    "ili_rate",
+    "temperature",
+    "humidity",
+    "wind_speed",
+    "pressure",
+    "flu_search_index",
+    "cold_search_index",
+    "fever_search_index",
+    "week_sin",
+    "week_cos",
+    "month_sin",
+    "month_cos",
+    "is_flu_season",
+    "ili_rate_lag1",
+    "ili_rate_lag2",
+    "ili_rate_lag4",
+    "ili_rate_roll_mean_4",
+    "ili_rate_roll_std_4",
+    "ili_rate_roll_mean_8",
+    "ili_rate_roll_std_8",
+    "temp_humidity_interaction",
+    "comfort_index",
+    "wind_chill",
+    "flu_search_index_pct_change",
+    "flu_search_index_acceleration",
+    "cold_search_index_pct_change",
+    "cold_search_index_acceleration",
+    "fever_search_index_pct_change",
+    "fever_search_index_acceleration"
+  ],
+  "num_variables": 29,
+  "split_metadata": {
+    "rows": 793,
+    "feature_count": 29,
+    "train_rows": 555,
+    "val_rows": 119,
+    "test_rows": 119,
+    "lookback_window": 16,
+    "forecast_horizon": 4,
+    "train_date_range": {
+      "start": "2011-01-31",
+      "end": "2021-09-20"
+    },
+    "val_date_range": {
+      "start": "2021-09-27",
+      "end": "2024-01-01"
+    },
+    "test_date_range": {
+      "start": "2024-01-08",
+      "end": "2026-04-13"
+    }
+  },
+  "source_type_summary": {
+    "official_cnic_report": {
+      "rows": 793,
+      "start": "2011-01-31",
+      "end": "2026-04-13"
+    }
+  },
+  "interpretation_note": "当前研究口径为中国国家流感中心北方省份真实周度 ILI% 监测序列。指标可用于该北方地区口径下的模型对比；不应外推为单一城市或区县病例预测结论。",
+  "metrics": {
+    "iTransformer": {
+      "RMSE": 0.7720000147819519,
+      "MAE": 0.49105894565582275,
+      "MAPE": 11.50626391172409,
+      "R2": 0.5384189784526825,
+      "peak_hit_rate": 0.3,
+      "peak_time_offset": 202,
+      "peak_value_error": 0.6841464042663574
+    },
+    "LSTM": {
+      "RMSE": 1.3655908107757568,
+      "MAE": 0.8799468278884888,
+      "MAPE": 18.806953728199005,
+      "R2": -0.4442903995513916,
+      "peak_hit_rate": 0.0,
+      "peak_time_offset": 28,
+      "peak_value_error": 3.7264833450317383
+    },
+    "DLinear": {
+      "RMSE": 1.0314639806747437,
+      "MAE": 0.6941758990287781,
+      "MAPE": 15.72735458612442,
+      "R2": 0.17601078748703003,
+      "peak_hit_rate": 0.0,
+      "peak_time_offset": 213,
+      "peak_value_error": 1.7289724349975586
+    },
+    "ARIMA": {
+      "RMSE": 0.9797467836935307,
+      "MAE": 0.5517107429136628,
+      "MAPE": 11.872765912971113,
+      "R2": 0.4502883157294585,
+      "peak_hit_rate": 0.375,
+      "peak_time_offset": 13,
+      "peak_value_error": 0.6544443936731916
+    }
+  },
+  "horizon_metrics": {
+    "iTransformer": {
+      "H1_RMSE": 0.5254172086715698,
+      "H1_MAE": 0.35091233253479004,
+      "H1_MAPE": 8.382338285446167,
+      "H2_RMSE": 0.6760343909263611,
+      "H2_MAE": 0.4594450891017914,
+      "H2_MAPE": 11.274971812963486,
+      "H3_RMSE": 0.8277955651283264,
+      "H3_MAE": 0.5345906019210815,
+      "H3_MAPE": 12.478993088006973,
+      "H4_RMSE": 0.9826518893241882,
+      "H4_MAE": 0.6192878484725952,
+      "H4_MAPE": 13.888755440711975
+    },
+    "LSTM": {
+      "H1_RMSE": 1.3578989505767822,
+      "H1_MAE": 0.8809760212898254,
+      "H1_MAPE": 18.860651552677155,
+      "H2_RMSE": 1.3622167110443115,
+      "H2_MAE": 0.8801928162574768,
+      "H2_MAPE": 18.811507523059845,
+      "H3_RMSE": 1.3663886785507202,
+      "H3_MAE": 0.8789175152778625,
+      "H3_MAPE": 18.82352977991104,
+      "H4_RMSE": 1.3757946491241455,
+      "H4_MAE": 0.8797013163566589,
+      "H4_MAPE": 18.732132017612457
+    },
+    "DLinear": {
+      "H1_RMSE": 0.874173641204834,
+      "H1_MAE": 0.5951093435287476,
+      "H1_MAPE": 13.545440137386322,
+      "H2_RMSE": 0.9877839088439941,
+      "H2_MAE": 0.6689103841781616,
+      "H2_MAPE": 15.192300081253052,
+      "H3_RMSE": 1.0834089517593384,
+      "H3_MAE": 0.7333837151527405,
+      "H3_MAPE": 16.597862541675568,
+      "H4_RMSE": 1.1584476232528687,
+      "H4_MAE": 0.779300332069397,
+      "H4_MAPE": 17.57381558418274
+    },
+    "ARIMA": {
+      "H1_RMSE": 0.5667717089312542,
+      "H1_MAE": 0.3464451282269,
+      "H1_MAPE": 7.920919572057319,
+      "H2_RMSE": 0.8666993392657981,
+      "H2_MAE": 0.5126557534725138,
+      "H2_MAPE": 11.267364446659785,
+      "H3_RMSE": 1.0977669926788733,
+      "H3_MAE": 0.6377661077048686,
+      "H3_MAPE": 13.519179281030446,
+      "H4_RMSE": 1.2498498932621585,
+      "H4_MAE": 0.7099759822503688,
+      "H4_MAPE": 14.783600352136894
+    }
+  }
+}

@@ -1,7 +1,7 @@
 """
 ARIMA 基准模型 — 传统统计方法对比
 
-单变量 ARIMA 模型，仅使用 ILI 率的历史数据进行预测。
+单变量 ARIMA 模型，仅使用 ILI 病例数的历史数据进行预测。
 作为深度学习方法的传统统计基准。
 
 Author: flu_prediction project
@@ -20,7 +20,7 @@ class ARIMABaseline:
     ARIMA 基准模型
     
     特点：
-    - 仅使用目标变量（ILI 率）的单变量历史序列
+    - 仅使用目标变量（ILI 病例数）的单变量历史序列
     - 不利用多源数据（气象、搜索指数）
     - 适用于对比展示多源数据融合的价值
     
@@ -117,10 +117,18 @@ class ARIMABaseline:
                 pred = fitted.forecast(steps=horizon)
                 predictions.append(pred)
                 actuals.append(actual)
-            except Exception:
-                # 如果拟合失败，使用最后已知值作为预测
-                predictions.append(np.full(horizon, train[-1]))
-                actuals.append(actual)
+            except Exception as e:
+                # 尝试降级为极简 ARIMA(0,1,1)
+                try:
+                    fallback_model = SimpleARIMA(train, order=(0, 1, 1))
+                    fallback_fitted = fallback_model.fit()
+                    pred = fallback_fitted.forecast(steps=horizon)
+                    predictions.append(pred)
+                    actuals.append(actual)
+                except Exception:
+                    # 如果仍失败，该窗口预测跳过，不应强行用最后一天真实值造假填充
+                    print(f"[ARIMA] 窗口 {i} 预测失败，跳过该窗口。")
+                    pass
         
         if predictions:
             return np.array(predictions), np.array(actuals)

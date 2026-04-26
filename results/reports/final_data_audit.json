@@ -1,0 +1,44 @@
+{
+  "flu_rows": 849,
+  "flu_date_start": "2010-01-04",
+  "flu_date_end": "2026-04-13",
+  "parse_status_counts": {
+    "ok": 739,
+    "imputed": 110
+  },
+  "missing_ili_rate_rows": 0,
+  "missing_positive_rate_rows": 0,
+  "partial_rows": 0,
+  "imputed_rows": 110,
+  "imputed_ili_rate_rows": 3,
+  "imputed_positive_rate_rows": 108,
+  "merged_rows": 797,
+  "merged_date_start": "2011-01-03",
+  "merged_date_end": "2026-04-13",
+  "feature_engineered_rows": 793,
+  "feature_engineered_date_start": "2011-01-31",
+  "feature_engineered_date_end": "2026-04-13",
+  "search_rows": 5593,
+  "search_date_start": "2011-01-01",
+  "search_date_end": "2026-04-24",
+  "search_region_count_summary": {
+    "fever_search_index_region_count": {
+      "min": 8,
+      "max": 8,
+      "nunique": 1
+    },
+    "cold_search_index_region_count": {
+      "min": 8,
+      "max": 8,
+      "nunique": 1
+    },
+    "flu_search_index_region_count": {
+      "min": 8,
+      "max": 8,
+      "nunique": 1
+    }
+  },
+  "weather_rows": 5594,
+  "weather_date_start": "2011-01-01",
+  "weather_date_end": "2026-04-25"
+}

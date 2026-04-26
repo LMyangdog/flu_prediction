@@ -23,7 +23,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau, StepLR
 
-from src.utils.metrics import compute_all_metrics, format_metrics
+from src.utils.metrics import compute_all_metrics, compute_horizon_metrics, format_metrics
 
 
 class EarlyStopping:
@@ -270,7 +270,7 @@ class Trainer:
         
         return total_loss / max(n_batches, 1)
     
-    def evaluate(self, test_loader: DataLoader, scaler=None) -> Tuple[Dict, np.ndarray, np.ndarray]:
+    def evaluate(self, test_loader: DataLoader, scaler=None) -> Tuple[Dict, np.ndarray, np.ndarray, Dict]:
         """
         测试集评估
         
@@ -281,6 +281,14 @@ class Trainer:
         Returns:
             (metrics_dict, predictions, actuals)
         """
+        # --- FIX: 加载最佳验证集权重，防止最终过拟合的权重污染评估结果 ---
+        best_model_path = os.path.join(self.checkpoint_dir, f"{self.model_name}_best.pt")
+        if os.path.exists(best_model_path):
+            try:
+                self.load_checkpoint(best_model_path)
+            except Exception as e:
+                print(f"[Trainer] 加载最佳模型失败: {e}，将使用当前 epoch 权重")
+                
         self.model.eval()
         all_preds = []
         all_targets = []
@@ -299,19 +307,23 @@ class Trainer:
         
         # 反归一化
         if scaler is not None:
-            predictions_flat = scaler.inverse_transform(predictions.reshape(-1, 1)).flatten()
-            actuals_flat = scaler.inverse_transform(actuals.reshape(-1, 1)).flatten()
+            predictions_2d = scaler.inverse_transform(predictions.reshape(-1, 1)).reshape(predictions.shape)
+            actuals_2d = scaler.inverse_transform(actuals.reshape(-1, 1)).reshape(actuals.shape)
         else:
-            predictions_flat = predictions.flatten()
-            actuals_flat = actuals.flatten()
-        
+            predictions_2d = predictions
+            actuals_2d = actuals
+
+        predictions_flat = predictions_2d.flatten()
+        actuals_flat = actuals_2d.flatten()
+
         # 计算指标
         metrics = compute_all_metrics(actuals_flat, predictions_flat)
+        horizon_metrics = compute_horizon_metrics(actuals_2d, predictions_2d)
         
         print(f"\n[{self.model_name}] 测试集评估结果:")
         print(format_metrics(metrics))
         
-        return metrics, predictions_flat, actuals_flat
+        return metrics, predictions_flat, actuals_flat, horizon_metrics
     
     def _save_checkpoint(self, epoch: int, val_loss: float, is_best: bool = False):
         """保存模型检查点"""

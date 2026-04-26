@@ -125,7 +125,7 @@ class Visualizer:
         # 主图：真实值 vs 预测值
         ax1 = axes[0]
         ax1.plot(x, actuals, color=COLORS['actual'], linewidth=2, 
-                label='真实值 (ILI%)', alpha=0.9)
+                label='真实值 (ILI病例数)', alpha=0.9)
         ax1.plot(x, predictions, color=COLORS.get(model_name, '#2196F3'), 
                 linewidth=2, label=f'{model_name} 预测', alpha=0.8, linestyle='--')
         
@@ -133,7 +133,7 @@ class Visualizer:
         ax1.fill_between(x, actuals, predictions, 
                          alpha=0.15, color=COLORS.get(model_name, '#2196F3'))
         
-        ax1.set_ylabel('ILI 率 (%)', fontsize=12)
+        ax1.set_ylabel('ILI病例数', fontsize=12)
         ax1.set_title(f'{model_name} — 流感趋势预测对比', fontsize=14, fontweight='bold')
         ax1.legend(fontsize=11, loc='upper right')
         ax1.grid(True, alpha=0.3)
@@ -166,7 +166,7 @@ class Visualizer:
             保存的文件路径
         """
         models = list(metrics_dict.keys())
-        base_metrics = ['RMSE', 'MAE', 'MAPE', 'R²']
+        base_metrics = ['RMSE', 'MAE', 'MAPE', 'R2']
         available_metrics = [m for m in base_metrics 
                             if all(m in metrics_dict[model] for model in models)]
         
@@ -195,8 +195,8 @@ class Visualizer:
             ax.set_title(metric, fontsize=14, fontweight='bold')
             ax.grid(True, alpha=0.2, axis='y')
             
-            # R² 指标越高越好，其他指标越低越好
-            if metric == 'R²':
+            # R2 指标越高越好，其他指标越低越好
+            if metric == 'R2':
                 best_idx = np.argmax(values)
             else:
                 best_idx = np.argmin(values)
@@ -262,15 +262,24 @@ class Visualizer:
         
         # 流感数据
         ax1 = axes[0]
-        if 'ili_rate' in df.columns:
-            ax1.plot(dates, df['ili_rate'], color='#E53935', linewidth=1.5, label='ILI 率 (%)')
-        if 'positive_rate' in df.columns:
+        if 'ili_cases' in df.columns:
+            ax1.plot(dates, df['ili_cases'], color='#E53935', linewidth=1.5, label='ILI 病例数')
+            ax1.set_ylabel('ILI 病例数', fontsize=11, color='#E53935')
+        elif 'ili_rate' in df.columns:
+            ax1.plot(dates, df['ili_rate'], color='#E53935', linewidth=1.5, label='ILI率 (%)')
+            ax1.set_ylabel('ILI率 (%)', fontsize=11, color='#E53935')
+        if 'positive_count_monthly' in df.columns:
+            ax1_twin = ax1.twinx()
+            ax1_twin.plot(dates, df['positive_count_monthly'], color='#AB47BC',
+                         linewidth=1.5, alpha=0.7, label='月度阳性数')
+            ax1_twin.set_ylabel('月度阳性数', fontsize=11, color='#AB47BC')
+            ax1_twin.legend(loc='upper left', fontsize=10)
+        elif 'positive_rate' in df.columns:
             ax1_twin = ax1.twinx()
             ax1_twin.plot(dates, df['positive_rate'], color='#AB47BC', 
                          linewidth=1.5, alpha=0.7, label='阳性率 (%)')
             ax1_twin.set_ylabel('阳性率 (%)', fontsize=11, color='#AB47BC')
             ax1_twin.legend(loc='upper left', fontsize=10)
-        ax1.set_ylabel('ILI 率 (%)', fontsize=11, color='#E53935')
         ax1.set_title('流感监测数据', fontsize=13, fontweight='bold')
         ax1.legend(loc='upper right', fontsize=10)
         ax1.grid(True, alpha=0.3)
@@ -356,7 +365,7 @@ class Visualizer:
                    label=model_name, alpha=0.7, linestyle='--')
         
         ax.set_xlabel('时间步', fontsize=12)
-        ax.set_ylabel('ILI 率 (%)', fontsize=12)
+        ax.set_ylabel('ILI病例数', fontsize=12)
         ax.set_title('多模型预测结果对比', fontsize=14, fontweight='bold')
         ax.legend(fontsize=11)
         ax.grid(True, alpha=0.3)

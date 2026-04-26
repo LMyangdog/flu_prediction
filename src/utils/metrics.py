@@ -95,13 +95,32 @@ def compute_all_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, flo
         'RMSE': rmse(y_true, y_pred),
         'MAE': mae(y_true, y_pred),
         'MAPE': mape(y_true, y_pred),
-        'R²': r2_score(y_true, y_pred),
+        'R2': r2_score(y_true, y_pred),
     }
     
     peak_metrics = peak_accuracy(y_true, y_pred)
     metrics.update(peak_metrics)
     
     return metrics
+
+
+def compute_horizon_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+    """
+    计算多步预测中每个 horizon 的误差，用于论文中的分步分析。
+    输入必须为二维数组: (num_samples, horizon)
+    """
+    if y_true.ndim != 2 or y_pred.ndim != 2:
+        return {}
+
+    horizon_metrics: Dict[str, float] = {}
+    horizon = min(y_true.shape[1], y_pred.shape[1])
+    for step in range(horizon):
+        suffix = f"H{step + 1}"
+        horizon_metrics[f"{suffix}_RMSE"] = rmse(y_true[:, step], y_pred[:, step])
+        horizon_metrics[f"{suffix}_MAE"] = mae(y_true[:, step], y_pred[:, step])
+        horizon_metrics[f"{suffix}_MAPE"] = mape(y_true[:, step], y_pred[:, step])
+
+    return horizon_metrics
 
 
 def format_metrics(metrics: Dict[str, float]) -> str:

@@ -1,0 +1,21 @@
+{
+  "rows": 793,
+  "feature_count": 22,
+  "train_rows": 555,
+  "val_rows": 119,
+  "test_rows": 119,
+  "lookback_window": 16,
+  "forecast_horizon": 4,
+  "train_date_range": {
+    "start": "2011-01-31",
+    "end": "2021-09-20"
+  },
+  "val_date_range": {
+    "start": "2021-09-27",
+    "end": "2024-01-01"
+  },
+  "test_date_range": {
+    "start": "2024-01-08",
+    "end": "2026-04-13"
+  }
+}

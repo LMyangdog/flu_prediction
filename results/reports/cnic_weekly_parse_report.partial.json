@@ -1,0 +1,31 @@
+{
+  "rows": 849,
+  "date_range": {
+    "start": "2010-01-04",
+    "end": "2026-04-13"
+  },
+  "parse_status_counts": {
+    "ok": 739,
+    "partial": 110
+  },
+  "missing_counts": {
+    "date": 0,
+    "year": 0,
+    "week": 0,
+    "ili_rate": 3,
+    "positive_rate": 108,
+    "positive_count": 409,
+    "sample_count": 409,
+    "southern_ili_rate": 3,
+    "southern_positive_rate": 123,
+    "southern_positive_count": 409,
+    "southern_sample_count": 409,
+    "source_type": 0,
+    "source_url": 0,
+    "pdf_url": 161,
+    "parse_method": 0,
+    "parse_status": 0,
+    "parse_note": 0
+  },
+  "output_path": "data\\raw\\flu\\cnic_north_weekly_flu.partial.csv"
+}

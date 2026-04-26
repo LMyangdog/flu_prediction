@@ -4,12 +4,18 @@
 
 # --- 数据配置 ---
 data:
+  # 严格真实数据模式：毕设默认禁止回退到模拟/占位数据
+  # 当前研究口径：以中国国家流感中心北方省份周度流感监测数据作为真实目标序列
+  data_source: "cnic_north_china_weekly"
+  strict_real_data: true
+  manifest_path: "data/raw/source_manifest.json"
+
   raw_dir: "data/raw"
   processed_dir: "data/processed"
   splits_dir: "data/splits"
   
   # 时间窗口参数
-  lookback_window: 48          # 输入历史窗口（周数），发挥 Transformer 长序列优势
+  lookback_window: 16          # 输入历史窗口（周数）：流感自相关半衰期约4-8周，48过长会引入噪声
   forecast_horizon: 4          # 预测未来周数
   
   # 数据集划分比例
@@ -18,19 +24,50 @@ data:
   test_ratio: 0.15
   
   # 数据采集参数
-  start_year: 2010             # 从 2010 年开始拉取长达 15 年的流感季节周期
-  end_year: 2025
-  target_city: "北京"
+  start_year: 2011             # 国家流感中心目标序列可追溯至2010；多源建模从百度指数可用的2011年开始
+  end_year: 2026
+  target_city: "北方地区"
+  flu_proxy_region: ""
+  proxy_scope: "中国北方省份真实周度流感监测序列"
+  target_region: "中国北方省份"
+  weather_locations:
+    - name: "北京"
+      latitude: 39.9042
+      longitude: 116.4074
+    - name: "天津"
+      latitude: 39.3434
+      longitude: 117.3616
+    - name: "济南"
+      latitude: 36.6512
+      longitude: 117.1201
+    - name: "石家庄"
+      latitude: 38.0428
+      longitude: 114.5149
+    - name: "沈阳"
+      latitude: 41.8057
+      longitude: 123.4315
+    - name: "哈尔滨"
+      latitude: 45.8038
+      longitude: 126.5349
+    - name: "西安"
+      latitude: 34.3416
+      longitude: 108.9398
+    - name: "太原"
+      latitude: 37.8706
+      longitude: 112.5489
 
 # --- 特征列定义 ---
 features:
   # 目标变量
   target_col: "ili_rate"
+  use_engineered_features: true
+  exclude_from_training:
+    - "year"
+    - "week"
   
   # 流感监测特征
   flu_cols:
-    - "ili_rate"               # 流感样病例百分比
-    - "positive_rate"          # 病毒阳性率
+    - "ili_rate"               # 北方省份哨点医院 ILI%
   
   # 气象特征
   weather_cols:
@@ -48,31 +85,32 @@ features:
 # --- iTransformer 模型配置 ---
 model:
   itransformer:
-    d_model: 64                # 嵌入维度，降低以防过拟合
-    n_heads: 4                 # 注意力头数
-    n_layers: 2                # Transformer 层数
+    d_model: 128               # 嵌入维度：足以区分多变量间的关联关系
+    n_heads: 8                 # 注意力头数
+    n_layers: 2                # Transformer层数：2层可组合复杂跨变量关系
     d_ff: 256                  # 前馈网络维度
-    dropout: 0.1
+    dropout: 0.1               # 小样本无需过强正则化
     activation: "gelu"
   
   # LSTM 基准模型配置
   lstm:
-    hidden_dim: 128
+    hidden_dim: 64             # 公平基准：与iTransformer同等量级的容量
     num_layers: 2
-    dropout: 0.2
+    dropout: 0.2               # 标准dropout，公平对比
     bidirectional: false
   
   # DLinear 基准模型配置
   dlinear:
-    individual: true           # 通道独立
+    individual: true           # 开启通道独立机制，公平基准
 
 # --- 训练配置 ---
 training:
-  epochs: 200
+  epochs: 300
   batch_size: 32
-  learning_rate: 0.001
-  weight_decay: 0.0001
-  patience: 15                 # 早停耐心值
+  random_seed: 42
+  learning_rate: 0.001         # 恢复标准学习率
+  weight_decay: 0.01           # 加大权重衰减，压制复杂模型过拟合
+  patience: 30
   scheduler: "cosine"          # 学习率调度器: cosine / step / plateau
   
   # 优化器
@@ -83,7 +121,7 @@ training:
   
   # 设备
   device: "cuda"               # cuda / cpu
-  num_workers: 2
+  num_workers: 0                 # 小样本 + Windows 环境下避免 DataLoader 多进程反复启动开销
   
   # 保存路径
   checkpoint_dir: "checkpoints"
@@ -103,3 +141,7 @@ web:
   host: "0.0.0.0"
   port: 8501
   title: "流感爆发趋势预测系统"
+
+# --- 报告输出 ---
+reporting:
+  reports_dir: "results/reports"

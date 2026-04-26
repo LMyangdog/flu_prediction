@@ -91,7 +91,7 @@ class FeatureEngineer:
     def _add_lag_features(self, df: pd.DataFrame, 
                           lags: Optional[List[int]] = None) -> pd.DataFrame:
         """
-        滞后特征 — ILI 率的历史值
+        滞后特征 — 目标变量的历史值
         
         Args:
             lags: 滞后周数列表，默认 [1, 2, 4]
@@ -99,7 +99,7 @@ class FeatureEngineer:
         if lags is None:
             lags = [1, 2, 4]
         
-        target = self.config.get('features', {}).get('target_col', 'ili_rate')
+        target = self.config.get('features', {}).get('target_col', 'ili_cases')
         
         for lag in lags:
             if target in df.columns:
@@ -119,7 +119,7 @@ class FeatureEngineer:
         if windows is None:
             windows = [4, 8]
         
-        target = self.config.get('features', {}).get('target_col', 'ili_rate')
+        target = self.config.get('features', {}).get('target_col', 'ili_cases')
         count = 0
         
         for w in windows:

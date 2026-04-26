@@ -70,7 +70,7 @@ class InvertedMultiHeadAttention(nn.Module):
     在变量维度上计算注意力：
     - Query、Key、Value 都来自变量 Token
     - 注意力权重表示变量间的相互影响程度
-    - 例如：温度变量通过注意力影响 ILI 率的预测
+    - 例如：温度变量通过注意力影响 ILI 病例数的预测
     """
     
     def __init__(self, d_model: int, n_heads: int, dropout: float = 0.1):

@@ -39,7 +39,8 @@ def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 
 def peak_accuracy(y_true: np.ndarray, y_pred: np.ndarray, 
-                  threshold_percentile: float = 90) -> Dict[str, float]:
+                  threshold_percentile: float = 90,
+                  include_time_offset: bool = True) -> Dict[str, float]:
     """
     峰值预测准确性评估
     
@@ -65,22 +66,28 @@ def peak_accuracy(y_true: np.ndarray, y_pred: np.ndarray,
     else:
         hit_rate = 0.0
     
-    # 峰值时间偏移（预测最大值与真实最大值的时间差）
-    true_peak_idx = np.argmax(y_true)
-    pred_peak_idx = np.argmax(y_pred)
-    time_offset = abs(int(true_peak_idx) - int(pred_peak_idx))
-    
-    # 峰值强度误差
-    peak_value_error = abs(float(y_true[true_peak_idx]) - float(y_pred[pred_peak_idx]))
-    
-    return {
+    metrics = {
         'peak_hit_rate': float(hit_rate),
-        'peak_time_offset': time_offset,
-        'peak_value_error': peak_value_error,
     }
 
+    # 峰值时间偏移只适合单一、有序、无重复时间轴的一维序列。
+    # 多步预测展平后同一目标日期会重复出现，此时不应把数组下标差解释为周数。
+    true_peak_idx = np.argmax(y_true)
+    pred_peak_idx = np.argmax(y_pred)
+    if include_time_offset:
+        metrics['peak_time_offset'] = abs(int(true_peak_idx) - int(pred_peak_idx))
+    
+    # 峰值强度误差
+    metrics['peak_value_error'] = abs(float(y_true[true_peak_idx]) - float(y_pred[pred_peak_idx]))
+    
+    return metrics
 
-def compute_all_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+
+def compute_all_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    include_peak_time_offset: bool = True,
+) -> Dict[str, float]:
     """
     计算所有评价指标
     
@@ -98,7 +105,7 @@ def compute_all_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, flo
         'R2': r2_score(y_true, y_pred),
     }
     
-    peak_metrics = peak_accuracy(y_true, y_pred)
+    peak_metrics = peak_accuracy(y_true, y_pred, include_time_offset=include_peak_time_offset)
     metrics.update(peak_metrics)
     
     return metrics

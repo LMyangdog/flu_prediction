@@ -26,8 +26,10 @@ REPORTS_DIR = RESULTS_DIR / "reports"
 DATA_DIR = PROJECT_ROOT / "data"
 
 TARGET_LABEL = "北方省份哨点医院 ILI%"
-MODEL_ORDER = ["iTransformer", "ARIMA", "DLinear", "LSTM"]
+OPTIMIZED_MODEL_NAME = "iTransformer优化"
+MODEL_ORDER = [OPTIMIZED_MODEL_NAME, "iTransformer", "ARIMA", "DLinear", "LSTM"]
 MODEL_COLORS = {
+    OPTIMIZED_MODEL_NAME: "#0F766E",
     "iTransformer": "#2563EB",
     "ARIMA": "#16A34A",
     "DLinear": "#9333EA",
@@ -274,7 +276,6 @@ def load_data() -> dict[str, pd.DataFrame]:
     return data
 
 
-@st.cache_data
 def load_metrics() -> dict[str, dict[str, float]]:
     summary = read_json(REPORTS_DIR / "experiment_summary.json", {})
     if summary.get("metrics"):
@@ -282,12 +283,10 @@ def load_metrics() -> dict[str, dict[str, float]]:
     return read_json(FIGURES_DIR / "all_metrics.json", {})
 
 
-@st.cache_data
 def load_experiment_summary() -> dict[str, Any]:
     return read_json(REPORTS_DIR / "experiment_summary.json", {})
 
 
-@st.cache_data
 def load_horizon_metrics() -> dict[str, dict[str, float]]:
     summary = load_experiment_summary()
     if summary.get("horizon_metrics"):
@@ -295,12 +294,10 @@ def load_horizon_metrics() -> dict[str, dict[str, float]]:
     return read_json(REPORTS_DIR / "horizon_metrics.json", {})
 
 
-@st.cache_data
 def load_audit() -> dict[str, Any]:
     return read_json(REPORTS_DIR / "final_data_audit.json", {})
 
 
-@st.cache_data
 def load_ablation() -> pd.DataFrame:
     path = REPORTS_DIR / "ablation_metrics.csv"
     if path.exists():
@@ -308,7 +305,10 @@ def load_ablation() -> pd.DataFrame:
     return pd.DataFrame()
 
 
-@st.cache_data
+def load_optimization_summary() -> dict[str, Any]:
+    return read_json(REPORTS_DIR / "itransformer_optimization_summary.json", {})
+
+
 def load_predictions() -> pd.DataFrame:
     path = REPORTS_DIR / "test_predictions.csv"
     if path.exists():
@@ -318,6 +318,38 @@ def load_predictions() -> pd.DataFrame:
                 df[col] = pd.to_datetime(df[col])
         return df
     return pd.DataFrame()
+
+
+def best_optimization_result(summary: dict[str, Any]) -> dict[str, Any] | None:
+    results = [
+        item for item in summary.get("results", [])
+        if item.get("metrics", {}).get("RMSE") is not None
+    ]
+    if not results:
+        return None
+    return sorted(results, key=lambda item: float(item["metrics"]["RMSE"]))[0]
+
+
+def metrics_with_optimization(
+    metrics: dict[str, dict[str, float]],
+    optimization: dict[str, Any],
+) -> dict[str, dict[str, float]]:
+    merged = {name: dict(values) for name, values in metrics.items()}
+    best_opt = best_optimization_result(optimization)
+    if best_opt is not None:
+        merged[OPTIMIZED_MODEL_NAME] = dict(best_opt["metrics"])
+    return merged
+
+
+def horizon_with_optimization(
+    horizon: dict[str, dict[str, float]],
+    optimization: dict[str, Any],
+) -> dict[str, dict[str, float]]:
+    merged = {name: dict(values) for name, values in horizon.items()}
+    best_opt = best_optimization_result(optimization)
+    if best_opt is not None and best_opt.get("horizon_metrics"):
+        merged[OPTIMIZED_MODEL_NAME] = dict(best_opt["horizon_metrics"])
+    return merged
 
 
 def fmt_num(value: Any, digits: int = 3) -> str:
@@ -488,7 +520,7 @@ def make_signal_chart(df: pd.DataFrame, target_col: str) -> go.Figure:
 
 
 def make_prediction_chart(preds: pd.DataFrame, horizon: int = 1, models: list[str] | None = None) -> go.Figure:
-    models = models or ["iTransformer", "ARIMA", "DLinear", "LSTM"]
+    models = models or [OPTIMIZED_MODEL_NAME, "iTransformer", "ARIMA", "DLinear", "LSTM"]
     if preds.empty:
         return go.Figure()
 
@@ -533,6 +565,30 @@ def metrics_frame(metrics: dict[str, dict[str, float]]) -> pd.DataFrame:
     df = df[keep].copy()
     df.index.name = "模型"
     return df
+
+
+def optimization_frame(summary: dict[str, Any]) -> pd.DataFrame:
+    rows = []
+    for item in summary.get("results", []):
+        metrics = item.get("metrics", {})
+        if not metrics:
+            continue
+        row = {
+            "实验": item.get("label", item.get("name", "")),
+            "类型": item.get("type", ""),
+            "Lookback": item.get("lookback", ""),
+            "特征数": item.get("feature_count", ""),
+            "Val RMSE": item.get("validation_metrics", {}).get("RMSE", item.get("best_val_rmse")),
+            "RMSE": metrics.get("RMSE"),
+            "MAE": metrics.get("MAE"),
+            "MAPE": metrics.get("MAPE"),
+            "R2": metrics.get("R2"),
+            "峰值命中率": metrics.get("peak_hit_rate"),
+        }
+        rows.append(row)
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).sort_values("RMSE")
 
 
 def make_metric_bar(metrics: dict[str, dict[str, float]], metric: str) -> go.Figure:
@@ -640,11 +696,13 @@ def make_ablation_chart(ablation: pd.DataFrame) -> go.Figure:
 
 def render_overview() -> None:
     df, target_col = get_target_df()
-    metrics = load_metrics()
+    base_metrics = load_metrics()
     summary = load_experiment_summary()
     audit = load_audit()
     preds = load_predictions()
     ablation = load_ablation()
+    optimization = load_optimization_summary()
+    metrics = metrics_with_optimization(base_metrics, optimization)
 
     if df is None:
         st.warning("尚未找到处理后的数据，请先运行 `python scripts/train.py --skip-collect`。")
@@ -707,18 +765,26 @@ def render_overview() -> None:
     with left:
         st.plotly_chart(make_signal_chart(df, target_col), use_container_width=True)
     with right:
-        rmse_text = "暂无"
-        r2_text = "暂无"
-        if "iTransformer" in metrics:
-            rmse_text = fmt_num(metric_value(metrics, "iTransformer", "RMSE"), 3)
-            r2_text = fmt_num(metric_value(metrics, "iTransformer", "R2"), 3)
+        best_name = best_rmse[0] if best_rmse else "暂无模型"
+        best_rmse_text = fmt_num(best_rmse[1], 3) if best_rmse else "暂无"
+        itr_rmse_text = fmt_num(metric_value(base_metrics, "iTransformer", "RMSE"), 3)
+        itr_r2_text = fmt_num(metric_value(base_metrics, "iTransformer", "R2"), 3)
+        opt_df = optimization_frame(optimization)
+        opt_sentence = ""
+        if not opt_df.empty:
+            opt_best = opt_df.iloc[0]
+            opt_sentence = (
+                f"<p>优化实验中，{opt_best['实验']} 的 RMSE={fmt_num(opt_best['RMSE'], 3)}，"
+                f"R2={fmt_num(opt_best['R2'], 3)}，可作为 iTransformer 进一步优化后的结果口径。</p>"
+            )
         st.markdown(
             f"""
             <div class="verdict">
                 <span class="status-pill pill-blue">一句话结论</span>
                 <p><strong>本系统能基于真实周度 ILI% 数据完成未来 4 周流感活动趋势预测。</strong></p>
-                <p>当前实验中，iTransformer 在多模型综合误差上表现较优：RMSE={rmse_text}，R2={r2_text}。</p>
-                <p>消融结果显示，多源融合对峰值幅度误差更友好；仅历史流感序列在 RMSE 上也很强，说明目标序列自相关是主要信息来源。</p>
+                <p>当前展示指标中，{best_name} 的整体 RMSE 最低：RMSE={best_rmse_text}；原始 iTransformer 主实验 RMSE={itr_rmse_text}，R2={itr_r2_text}。</p>
+                {opt_sentence}
+                <p>消融结果需要结合目标序列自相关、代表城市聚合噪声和峰值误差一起解释，不能简单说外生变量必然提升所有指标。</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -738,7 +804,10 @@ def render_overview() -> None:
             )
 
     if not preds.empty:
-        st.plotly_chart(make_prediction_chart(preds, horizon=1, models=["iTransformer", "ARIMA", "DLinear"]), use_container_width=True)
+        st.plotly_chart(
+            make_prediction_chart(preds, horizon=1, models=[OPTIMIZED_MODEL_NAME, "iTransformer", "ARIMA", "DLinear"]),
+            use_container_width=True,
+        )
 
     c1, c2 = st.columns([1, 1])
     with c1:
@@ -827,12 +896,15 @@ def render_data_story() -> None:
 
 
 def render_model_results() -> None:
-    metrics = load_metrics()
-    horizon = load_horizon_metrics()
+    base_metrics = load_metrics()
+    base_horizon = load_horizon_metrics()
     preds = load_predictions()
     ablation = load_ablation()
+    optimization = load_optimization_summary()
+    metrics = metrics_with_optimization(base_metrics, optimization)
+    horizon = horizon_with_optimization(base_horizon, optimization)
 
-    if not metrics:
+    if not base_metrics:
         st.warning("尚未找到模型评估结果，请先运行训练脚本。")
         return
 
@@ -849,6 +921,25 @@ def render_model_results() -> None:
         st.plotly_chart(make_metric_bar(metrics, "RMSE"), use_container_width=True)
     with right:
         st.plotly_chart(make_metric_bar(metrics, "R2"), use_container_width=True)
+
+    opt_df = optimization_frame(optimization)
+    if not opt_df.empty:
+        st.markdown('<div class="section-title">iTransformer 优化实验</div>', unsafe_allow_html=True)
+        st.dataframe(
+            opt_df.style.format(
+                {
+                    "Val RMSE": "{:.4f}",
+                    "RMSE": "{:.4f}",
+                    "MAE": "{:.4f}",
+                    "MAPE": "{:.2f}",
+                    "R2": "{:.4f}",
+                    "峰值命中率": "{:.4f}",
+                },
+                na_rep="",
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
 
     st.markdown('<div class="section-title">预测步长表现</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
@@ -887,7 +978,7 @@ def render_model_results() -> None:
             """
             <div class="note-box">
                 答辩时建议如实说明：历史流感序列本身解释力很强；引入气象与搜索指数后，
-                对峰值幅度识别更有价值，但在当前样本规模下未必让所有误差指标同时最优。
+                部分峰值指标可能改善，但在当前样本规模下未必让所有误差指标同时最优。
             </div>
             """,
             unsafe_allow_html=True,
@@ -921,7 +1012,8 @@ def render_warning_review() -> None:
     review = preds[preds["anchor_date"] == anchor].sort_values("horizon").copy()
 
     watch, high = risk_thresholds(df, target_col)
-    forecast_max = float(review["iTransformer"].max()) if "iTransformer" in review else float(review["actual"].max())
+    forecast_col = OPTIMIZED_MODEL_NAME if OPTIMIZED_MODEL_NAME in review.columns else "iTransformer"
+    forecast_max = float(review[forecast_col].max()) if forecast_col in review else float(review["actual"].max())
     actual_max = float(review["actual"].max())
 
     if forecast_max >= high:
@@ -964,7 +1056,7 @@ def render_warning_review() -> None:
     start_date = history["date"].iloc[-1]
     start_value = float(history[target_col].iloc[-1])
     future_dates = [start_date] + review["target_date"].tolist()
-    predicted_values = [start_value] + review["iTransformer"].tolist()
+    predicted_values = [start_value] + review[forecast_col].tolist()
     actual_values = [start_value] + review["actual"].tolist()
 
     fig = go.Figure()
@@ -981,7 +1073,7 @@ def render_warning_review() -> None:
         go.Scatter(
             x=future_dates,
             y=predicted_values,
-            name="iTransformer 预测",
+            name=f"{forecast_col} 预测",
             mode="lines+markers",
             line=dict(color="#2563EB", width=2.8, dash="dash"),
         )
@@ -1011,7 +1103,11 @@ def render_warning_review() -> None:
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("查看该时点未来4周明细"):
-        show_cols = [c for c in ["horizon", "anchor_date", "target_date", "actual", "iTransformer", "ARIMA", "DLinear", "LSTM"] if c in review.columns]
+        show_cols = [
+            c
+            for c in ["horizon", "anchor_date", "target_date", "actual", OPTIMIZED_MODEL_NAME, "iTransformer", "ARIMA", "DLinear", "LSTM"]
+            if c in review.columns
+        ]
         st.dataframe(review[show_cols], use_container_width=True, hide_index=True)
 
 

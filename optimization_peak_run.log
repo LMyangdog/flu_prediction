@@ -1,0 +1,580 @@
+[跳过] 使用已有数据
+
+============================================================
+Step 2: 特征工程
+============================================================
+
+[特征工程] 开始构建衍生特征...
+  [时间特征] 添加 5 个: week_sin/cos, month_sin/cos, is_flu_season
+  [滞后特征] 添加 3 个: ['ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4']
+  [滚动特征] 添加 4 个: 窗口大小 [4, 8]
+  [交叉特征] 添加 3 个
+  [搜索衍生] 添加 6 个
+[特征工程] 完成！新增特征后删除 4 行 NaN
+[特征工程] 最终特征数: 33, 样本数: 793
+
+============================================================
+iTransformer 优化实验: 历史特征 L16 baseline (history_l16_baseline_capacity)
+============================================================
+[Seed] random_seed=42
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 536 samples
+  - Val:   100 samples
+  - Test:  100 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\history_l16_baseline_capacity/
+
+[DataLoader] 创建完成:
+  Train: 536 samples, 17 batches
+  Val:   100 samples, 4 batches
+  Test:  100 samples, 4 batches
+  变量数: 13, 回看窗口: 16, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 301,444
+iTransformer(
+  num_variables=13,
+  lookback=16,
+  horizon=4,
+  d_model=128,
+  params=301,444
+)
+[Trainer] 使用 CPU
+
+============================================================
+开始训练: iTransformerOpt_history_l16_baseline_capacity
+============================================================
+Epochs: 180, 设备: cpu
+Loss: mse
+Epoch    1/180 | Train Loss: 0.334636 | Val Loss: 0.121438 | LR: 1.00e-03 | Time: 0s
+Epoch   10/180 | Train Loss: 0.008247 | Val Loss: 0.053599 | LR: 9.94e-04 | Time: 5s
+  [EarlyStopping] 5/24 (最佳 epoch: 13)
+Epoch   20/180 | Train Loss: 0.006861 | Val Loss: 0.055178 | LR: 9.73e-04 | Time: 9s
+  [EarlyStopping] 5/24 (最佳 epoch: 19)
+  [EarlyStopping] 10/24 (最佳 epoch: 19)
+Epoch   30/180 | Train Loss: 0.006295 | Val Loss: 0.068277 | LR: 9.37e-04 | Time: 13s
+  [EarlyStopping] 15/24 (最佳 epoch: 19)
+  [EarlyStopping] 20/24 (最佳 epoch: 19)
+Epoch   40/180 | Train Loss: 0.005917 | Val Loss: 0.066128 | LR: 8.89e-04 | Time: 17s
+
+[Early Stopping] 在 Epoch 43 停止训练
+  最佳验证损失: 0.049898 (Epoch 19)
+
+训练完成！总时间: 18.3s
+最佳验证损失: 0.049898
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerOpt_history_l16_baseline_capacity_best.pt (Epoch 19)
+
+[iTransformerOpt_history_l16_baseline_capacity] 测试集评估结果:
+  RMSE: 0.9794
+  MAE: 0.6024
+  MAPE: 13.5780
+  R2: 0.4507
+  peak_hit_rate: 0.3500
+  peak_value_error: 2.6530
+
+============================================================
+iTransformer 优化实验: 历史特征 L24 baseline (history_l24_baseline_capacity)
+============================================================
+[Seed] random_seed=42
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 528 samples
+  - Val:   92 samples
+  - Test:  92 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\history_l24_baseline_capacity/
+
+[DataLoader] 创建完成:
+  Train: 528 samples, 17 batches
+  Val:   92 samples, 3 batches
+  Test:  92 samples, 3 batches
+  变量数: 13, 回看窗口: 24, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 302,468
+iTransformer(
+  num_variables=13,
+  lookback=24,
+  horizon=4,
+  d_model=128,
+  params=302,468
+)
+[Trainer] 使用 CPU
+
+============================================================
+开始训练: iTransformerOpt_history_l24_baseline_capacity
+============================================================
+Epochs: 180, 设备: cpu
+Loss: mse
+Epoch    1/180 | Train Loss: 0.286018 | Val Loss: 0.088333 | LR: 1.00e-03 | Time: 0s
+Epoch   10/180 | Train Loss: 0.007611 | Val Loss: 0.051253 | LR: 9.94e-04 | Time: 4s
+Epoch   20/180 | Train Loss: 0.006314 | Val Loss: 0.047415 | LR: 9.73e-04 | Time: 8s
+Epoch   30/180 | Train Loss: 0.006048 | Val Loss: 0.047091 | LR: 9.37e-04 | Time: 11s
+  [EarlyStopping] 5/24 (最佳 epoch: 28)
+  [EarlyStopping] 10/24 (最佳 epoch: 28)
+Epoch   40/180 | Train Loss: 0.006302 | Val Loss: 0.049248 | LR: 8.89e-04 | Time: 15s
+  [EarlyStopping] 15/24 (最佳 epoch: 28)
+Epoch   50/180 | Train Loss: 0.006198 | Val Loss: 0.047895 | LR: 8.28e-04 | Time: 19s
+  [EarlyStopping] 5/24 (最佳 epoch: 48)
+  [EarlyStopping] 10/24 (最佳 epoch: 48)
+Epoch   60/180 | Train Loss: 0.005902 | Val Loss: 0.048819 | LR: 7.58e-04 | Time: 25s
+  [EarlyStopping] 15/24 (最佳 epoch: 48)
+  [EarlyStopping] 20/24 (最佳 epoch: 48)
+Epoch   70/180 | Train Loss: 0.006067 | Val Loss: 0.050043 | LR: 6.80e-04 | Time: 30s
+
+[Early Stopping] 在 Epoch 72 停止训练
+  最佳验证损失: 0.046027 (Epoch 48)
+
+训练完成！总时间: 31.4s
+最佳验证损失: 0.046027
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerOpt_history_l24_baseline_capacity_best.pt (Epoch 48)
+
+[iTransformerOpt_history_l24_baseline_capacity] 测试集评估结果:
+  RMSE: 1.1161
+  MAE: 0.6077
+  MAPE: 12.2188
+  R2: 0.3433
+  peak_hit_rate: 0.0000
+  peak_value_error: 4.3344
+
+============================================================
+iTransformer 优化实验: 历史特征 L16 AdamW (history_l16_adamw)
+============================================================
+[Seed] random_seed=42
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 536 samples
+  - Val:   100 samples
+  - Test:  100 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\history_l16_adamw/
+
+[DataLoader] 创建完成:
+  Train: 536 samples, 17 batches
+  Val:   100 samples, 4 batches
+  Test:  100 samples, 4 batches
+  变量数: 13, 回看窗口: 16, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 301,444
+iTransformer(
+  num_variables=13,
+  lookback=16,
+  horizon=4,
+  d_model=128,
+  params=301,444
+)
+[Trainer] 使用 CPU
+
+============================================================
+开始训练: iTransformerOpt_history_l16_adamw
+============================================================
+Epochs: 180, 设备: cpu
+Loss: mse
+Epoch    1/180 | Train Loss: 0.272398 | Val Loss: 0.110475 | LR: 7.00e-04 | Time: 0s
+Epoch   10/180 | Train Loss: 0.011879 | Val Loss: 0.049311 | LR: 6.96e-04 | Time: 4s
+  [EarlyStopping] 5/24 (最佳 epoch: 10)
+Epoch   20/180 | Train Loss: 0.009352 | Val Loss: 0.053802 | LR: 6.81e-04 | Time: 8s
+  [EarlyStopping] 5/24 (最佳 epoch: 17)
+  [EarlyStopping] 10/24 (最佳 epoch: 17)
+Epoch   30/180 | Train Loss: 0.008442 | Val Loss: 0.059343 | LR: 6.56e-04 | Time: 13s
+  [EarlyStopping] 15/24 (最佳 epoch: 17)
+  [EarlyStopping] 20/24 (最佳 epoch: 17)
+Epoch   40/180 | Train Loss: 0.006674 | Val Loss: 0.068557 | LR: 6.22e-04 | Time: 16s
+
+[Early Stopping] 在 Epoch 41 停止训练
+  最佳验证损失: 0.048360 (Epoch 17)
+
+训练完成！总时间: 16.8s
+最佳验证损失: 0.048360
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerOpt_history_l16_adamw_best.pt (Epoch 17)
+
+[iTransformerOpt_history_l16_adamw] 测试集评估结果:
+  RMSE: 1.0681
+  MAE: 0.6583
+  MAPE: 14.6174
+  R2: 0.3467
+  peak_hit_rate: 0.3750
+  peak_value_error: 0.0681
+
+============================================================
+iTransformer 优化实验: 历史特征 L16 峰值加权 (history_l16_peak_weighted)
+============================================================
+[Seed] random_seed=42
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 536 samples
+  - Val:   100 samples
+  - Test:  100 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\history_l16_peak_weighted/
+
+[DataLoader] 创建完成:
+  Train: 536 samples, 17 batches
+  Val:   100 samples, 4 batches
+  Test:  100 samples, 4 batches
+  变量数: 13, 回看窗口: 16, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 301,444
+iTransformer(
+  num_variables=13,
+  lookback=16,
+  horizon=4,
+  d_model=128,
+  params=301,444
+)
+[Trainer] 使用 CPU
+
+============================================================
+开始训练: iTransformerOpt_history_l16_peak_weighted
+============================================================
+Epochs: 180, 设备: cpu
+Loss: peak_weighted_mse
+Epoch    1/180 | Train Loss: 0.284180 | Val Loss: 0.281036 | LR: 7.00e-04 | Time: 0s
+Epoch   10/180 | Train Loss: 0.013599 | Val Loss: 0.125517 | LR: 6.96e-04 | Time: 4s
+  [EarlyStopping] 5/24 (最佳 epoch: 8)
+Epoch   20/180 | Train Loss: 0.010385 | Val Loss: 0.147592 | LR: 6.81e-04 | Time: 8s
+  [EarlyStopping] 5/24 (最佳 epoch: 19)
+  [EarlyStopping] 10/24 (最佳 epoch: 19)
+Epoch   30/180 | Train Loss: 0.009185 | Val Loss: 0.129698 | LR: 6.56e-04 | Time: 12s
+  [EarlyStopping] 15/24 (最佳 epoch: 19)
+  [EarlyStopping] 20/24 (最佳 epoch: 19)
+Epoch   40/180 | Train Loss: 0.007738 | Val Loss: 0.139617 | LR: 6.22e-04 | Time: 15s
+
+[Early Stopping] 在 Epoch 43 停止训练
+  最佳验证损失: 0.112321 (Epoch 19)
+
+训练完成！总时间: 16.6s
+最佳验证损失: 0.112321
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerOpt_history_l16_peak_weighted_best.pt (Epoch 19)
+
+[iTransformerOpt_history_l16_peak_weighted] 测试集评估结果:
+  RMSE: 1.2841
+  MAE: 0.7871
+  MAPE: 17.7486
+  R2: 0.0558
+  peak_hit_rate: 0.4000
+  peak_value_error: 1.4372
+
+============================================================
+iTransformer 优化实验: 历史特征 L16 峰值+趋势 (history_l16_peak_trend)
+============================================================
+[Seed] random_seed=42
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 536 samples
+  - Val:   100 samples
+  - Test:  100 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\history_l16_peak_trend/
+
+[DataLoader] 创建完成:
+  Train: 536 samples, 17 batches
+  Val:   100 samples, 4 batches
+  Test:  100 samples, 4 batches
+  变量数: 13, 回看窗口: 16, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 301,444
+iTransformer(
+  num_variables=13,
+  lookback=16,
+  horizon=4,
+  d_model=128,
+  params=301,444
+)
+[Trainer] 使用 CPU
+
+============================================================
+开始训练: iTransformerOpt_history_l16_peak_trend
+============================================================
+Epochs: 180, 设备: cpu
+Loss: peak_trend_mse
+Epoch    1/180 | Train Loss: 0.455909 | Val Loss: 0.265115 | LR: 7.00e-04 | Time: 0s
+Epoch   10/180 | Train Loss: 0.017657 | Val Loss: 0.131027 | LR: 6.96e-04 | Time: 4s
+  [EarlyStopping] 5/24 (最佳 epoch: 8)
+Epoch   20/180 | Train Loss: 0.012730 | Val Loss: 0.140466 | LR: 6.81e-04 | Time: 8s
+  [EarlyStopping] 5/24 (最佳 epoch: 15)
+  [EarlyStopping] 10/24 (最佳 epoch: 15)
+Epoch   30/180 | Train Loss: 0.011022 | Val Loss: 0.138076 | LR: 6.56e-04 | Time: 11s
+  [EarlyStopping] 15/24 (最佳 epoch: 15)
+  [EarlyStopping] 20/24 (最佳 epoch: 15)
+
+[Early Stopping] 在 Epoch 39 停止训练
+  最佳验证损失: 0.114282 (Epoch 15)
+
+训练完成！总时间: 15.3s
+最佳验证损失: 0.114282
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerOpt_history_l16_peak_trend_best.pt (Epoch 15)
+
+[iTransformerOpt_history_l16_peak_trend] 测试集评估结果:
+  RMSE: 1.2028
+  MAE: 0.7565
+  MAPE: 17.2431
+  R2: 0.1715
+  peak_hit_rate: 0.3250
+  peak_value_error: 0.1727
+
+============================================================
+iTransformer 优化实验: 历史特征 L16 compact (history_l16_compact)
+============================================================
+[Seed] random_seed=42
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 536 samples
+  - Val:   100 samples
+  - Test:  100 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\history_l16_compact/
+
+[DataLoader] 创建完成:
+  Train: 536 samples, 17 batches
+  Val:   100 samples, 4 batches
+  Test:  100 samples, 4 batches
+  变量数: 13, 回看窗口: 16, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 76,996
+iTransformer(
+  num_variables=13,
+  lookback=16,
+  horizon=4,
+  d_model=64,
+  params=76,996
+)
+[Trainer] 使用 CPU
+
+============================================================
+开始训练: iTransformerOpt_history_l16_compact
+============================================================
+Epochs: 180, 设备: cpu
+Loss: mse
+Epoch    1/180 | Train Loss: 0.261398 | Val Loss: 0.129925 | LR: 5.00e-04 | Time: 0s
+Epoch   10/180 | Train Loss: 0.016026 | Val Loss: 0.078546 | LR: 5.00e-04 | Time: 3s
+Epoch   20/180 | Train Loss: 0.009068 | Val Loss: 0.062946 | LR: 5.00e-04 | Time: 5s
+  [EarlyStopping] 5/24 (最佳 epoch: 21)
+Epoch   30/180 | Train Loss: 0.008055 | Val Loss: 0.063113 | LR: 2.50e-04 | Time: 8s
+  [EarlyStopping] 10/24 (最佳 epoch: 21)
+  [EarlyStopping] 15/24 (最佳 epoch: 21)
+Epoch   40/180 | Train Loss: 0.007785 | Val Loss: 0.063988 | LR: 6.25e-05 | Time: 11s
+  [EarlyStopping] 20/24 (最佳 epoch: 21)
+
+[Early Stopping] 在 Epoch 45 停止训练
+  最佳验证损失: 0.062102 (Epoch 21)
+
+训练完成！总时间: 11.9s
+最佳验证损失: 0.062102
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerOpt_history_l16_compact_best.pt (Epoch 21)
+
+[iTransformerOpt_history_l16_compact] 测试集评估结果:
+  RMSE: 1.0900
+  MAE: 0.6374
+  MAPE: 13.5436
+  R2: 0.3196
+  peak_hit_rate: 0.0000
+  peak_value_error: 3.4491
+
+============================================================
+ARIMA 残差混合实验: 历史特征 L24 baseline (history_l24_baseline_capacity)
+============================================================
+[Seed] random_seed=42
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 528 samples
+  - Val:   92 samples
+  - Test:  92 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\arima_residual_history_l24_baseline_capacity/
+
+[DataLoader] 创建完成:
+  Train: 528 samples, 17 batches
+  Val:   92 samples, 3 batches
+  Test:  92 samples, 3 batches
+  变量数: 13, 回看窗口: 24, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 302,468
+iTransformer(
+  num_variables=13,
+  lookback=24,
+  horizon=4,
+  d_model=128,
+  params=302,468
+)
+[Trainer] 使用 CPU
+
+============================================================
+开始训练: iTransformerResidual_history_l24_baseline_capacity
+============================================================
+Epochs: 180, 设备: cpu
+Loss: mse
+Epoch    1/180 | Train Loss: 0.290797 | Val Loss: 0.080067 | LR: 1.00e-03 | Time: 0s
+Epoch   10/180 | Train Loss: 0.007557 | Val Loss: 0.052413 | LR: 9.94e-04 | Time: 4s
+  [EarlyStopping] 5/24 (最佳 epoch: 9)
+Epoch   20/180 | Train Loss: 0.006208 | Val Loss: 0.050973 | LR: 9.73e-04 | Time: 8s
+Epoch   30/180 | Train Loss: 0.005927 | Val Loss: 0.051027 | LR: 9.37e-04 | Time: 11s
+  [EarlyStopping] 5/24 (最佳 epoch: 25)
+  [EarlyStopping] 10/24 (最佳 epoch: 25)
+Epoch   40/180 | Train Loss: 0.006311 | Val Loss: 0.052356 | LR: 8.89e-04 | Time: 15s
+  [EarlyStopping] 15/24 (最佳 epoch: 25)
+  [EarlyStopping] 20/24 (最佳 epoch: 25)
+
+[Early Stopping] 在 Epoch 49 停止训练
+  最佳验证损失: 0.050609 (Epoch 25)
+
+训练完成！总时间: 19.2s
+最佳验证损失: 0.050609
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerResidual_history_l24_baseline_capacity_best.pt (Epoch 25)
+
+[ARIMA + iTransformer Residual] 测试集评估结果:
+  RMSE: 1.0057
+  MAE: 0.6018
+  MAPE: 13.3580
+  R2: 0.4668
+  peak_hit_rate: 0.2500
+  peak_value_error: 1.0694
+
+============================================================
+Train+Val 固定轮数重训: 历史特征 L24 baseline (history_l24_baseline_capacity)
+============================================================
+[Seed] random_seed=42
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 528 samples
+  - Val:   92 samples
+  - Test:  92 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\trainval_refit_history_l24_baseline_capacity/
+
+[iTransformer] 模型构建完成
+  参数量: 302,468
+iTransformer(
+  num_variables=13,
+  lookback=24,
+  horizon=4,
+  d_model=128,
+  params=302,468
+)
+[Trainer] 使用 CPU
+
+============================================================
+固定轮数训练: iTransformerTrainVal_history_l24_baseline_capacity
+============================================================
+Epochs: 48, 设备: cpu
+Loss: mse
+Epoch    1/48 | Train Loss: 0.237827 | LR: 1.00e-03 | Time: 0s
+Epoch   10/48 | Train Loss: 0.012965 | LR: 9.94e-04 | Time: 4s
+Epoch   20/48 | Train Loss: 0.011036 | LR: 9.73e-04 | Time: 9s
+Epoch   30/48 | Train Loss: 0.011611 | LR: 9.37e-04 | Time: 13s
+Epoch   40/48 | Train Loss: 0.011117 | LR: 8.89e-04 | Time: 18s
+Epoch   48/48 | Train Loss: 0.011216 | LR: 8.41e-04 | Time: 23s
+
+固定轮数训练完成！总时间: 22.7s
+最终训练损失: 0.011216
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerTrainVal_history_l24_baseline_capacity_best.pt (Epoch 48)
+
+[iTransformerTrainVal_history_l24_baseline_capacity] 测试集评估结果:
+  RMSE: 1.0659
+  MAE: 0.6385
+  MAPE: 13.5452
+  R2: 0.4011
+  peak_hit_rate: 0.0000
+  peak_value_error: 3.7464
+
+============================================================
+验证集加权融合: 历史特征 L24 baseline (history_l24_baseline_capacity)
+============================================================
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 528 samples
+  - Val:   92 samples
+  - Test:  92 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\history_l24_baseline_capacity/
+
+[DataLoader] 创建完成:
+  Train: 528 samples, 17 batches
+  Val:   92 samples, 3 batches
+  Test:  92 samples, 3 batches
+  变量数: 13, 回看窗口: 24, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 302,468
+iTransformer(
+  num_variables=13,
+  lookback=24,
+  horizon=4,
+  d_model=128,
+  params=302,468
+)
+[Trainer] 使用 CPU
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerOpt_history_l24_baseline_capacity_best.pt (Epoch 48)
+
+[ARIMA + iTransformer Validation Ensemble] 测试集评估结果:
+  alpha_arima: 0.26 (val_RMSE=1.4642)
+  RMSE: 1.0571
+  MAE: 0.5769
+  MAPE: 11.7404
+  R2: 0.4109
+  peak_hit_rate: 0.0000
+  peak_value_error: 3.4058
+
+优化实验报告已保存:
+  - results/reports\itransformer_optimization_summary.json
+  - results/reports\itransformer_optimization_report.md

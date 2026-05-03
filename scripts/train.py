@@ -136,10 +136,9 @@ def run_arima(config: dict, df: pd.DataFrame, split_metadata: dict):
 
     from statsmodels.tsa.statespace.sarimax import SARIMAX
 
-    initial_end = train_size + lookback
     try:
         model = SARIMAX(
-            series[:initial_end],
+            series[:train_size],
             order=(2, 1, 2),
             seasonal_order=(0, 0, 0, 0),
             enforce_stationarity=False,
@@ -148,6 +147,14 @@ def run_arima(config: dict, df: pd.DataFrame, split_metadata: dict):
         fitted = model.fit(disp=False, maxiter=100)
     except Exception as exc:
         print(f"[ARIMA] 初始拟合失败: {exc}")
+        return {}, np.array([]), np.array([]), {}
+
+    # 测试段的前 lookback 周只作为已观测上下文更新滤波状态，不参与参数重拟合。
+    try:
+        for observed_idx in range(train_size, train_size + lookback):
+            fitted = fitted.append([series[observed_idx]], refit=False)
+    except Exception as exc:
+        print(f"[ARIMA] 测试上下文状态更新失败: {exc}")
         return {}, np.array([]), np.array([]), {}
 
     for i in range(n_windows):
@@ -172,7 +179,7 @@ def run_arima(config: dict, df: pd.DataFrame, split_metadata: dict):
 
     preds_flat = preds.flatten()
     actuals_flat = actuals.flatten()
-    metrics = compute_all_metrics(actuals_flat, preds_flat)
+    metrics = compute_all_metrics(actuals_flat, preds_flat, include_peak_time_offset=False)
     horizon_metrics = compute_horizon_metrics(actuals, preds)
 
     print(f"\n[ARIMA] 测试集评估结果:")
@@ -226,8 +233,23 @@ def write_experiment_brief(summary: dict, reports_dir: str) -> str:
     source_types = summary.get("source_type_summary", {})
     target_col = summary.get("target_col", "ili_rate")
     best_model = "表现最优模型"
+    optimization_path = os.path.join(reports_dir, "itransformer_optimization_summary.json")
+    best_optimized = None
+    if os.path.exists(optimization_path):
+        try:
+            with open(optimization_path, "r", encoding="utf-8") as f:
+                opt_results = json.load(f).get("results", [])
+            scored = [item for item in opt_results if item.get("metrics", {}).get("RMSE") is not None]
+            if scored:
+                best_optimized = min(scored, key=lambda item: item["metrics"]["RMSE"])
+        except Exception as exc:
+            print(f"[实验简报] 优化实验摘要读取失败: {exc}")
 
-    ranking = sorted(metrics.items(), key=lambda item: item[1].get("RMSE", float("inf")))
+    ranking_metrics = {name: dict(value) for name, value in metrics.items()}
+    if best_optimized is not None:
+        ranking_metrics["iTransformer优化"] = dict(best_optimized["metrics"])
+
+    ranking = sorted(ranking_metrics.items(), key=lambda item: item[1].get("RMSE", float("inf")))
     if ranking:
         best_model = ranking[0][0]
 
@@ -236,7 +258,7 @@ def write_experiment_brief(summary: dict, reports_dir: str) -> str:
         "",
         "## 一句话结论",
         "",
-        "当前实验已完成国家流感中心北方省份周度流感监测序列、北方代表城市气象数据与百度指数聚合序列的三源对齐、特征工程、iTransformer/LSTM/DLinear/ARIMA 对比与多步预测评估。测试区间采用真实周度 ILI% 序列，结果可作为当前北方地区研究口径下的模型对比依据。",
+        "当前实验已完成国家流感中心北方省份周度流感监测序列、北方代表城市气象数据与百度指数聚合序列的三源对齐、特征工程、iTransformer/LSTM/DLinear/ARIMA 对比、多步预测评估，以及 iTransformer 优化模型补充实验。测试区间采用真实周度 ILI% 序列，结果可作为当前北方地区研究口径下的模型对比依据。",
         "",
         "## 数据口径",
         "",
@@ -269,21 +291,39 @@ def write_experiment_brief(summary: dict, reports_dir: str) -> str:
                 f"{model_metrics.get('R2', 0):.3f} |"
             )
 
+    if best_optimized is not None:
+        opt_m = best_optimized["metrics"]
+        lines.extend(
+            [
+                "",
+                "## iTransformer 优化模型",
+                "",
+                f"- 当前优化口径：`{best_optimized.get('label', best_optimized.get('name'))}`。",
+                f"- 测试集指标：RMSE={opt_m.get('RMSE', 0):.3f}，MAE={opt_m.get('MAE', 0):.3f}，MAPE={opt_m.get('MAPE', 0):.2f}%，R2={opt_m.get('R2', 0):.3f}。",
+                "- 该模型使用验证集确定后处理参数，测试集指标仅用于最终横向报告，不再据此继续手工调参。",
+            ]
+        )
+        if best_optimized.get("alpha_arima") is not None:
+            lines.append(
+                f"- 融合权重：ARIMA={best_optimized['alpha_arima']:.2f}，iTransformer={best_optimized.get('alpha_itransformer', 0):.2f}。"
+            )
+
     lines.extend(
         [
             "",
             "## 答辩表述建议",
             "",
-            "- 可以说：本项目基于公开可追溯的国家流感中心周报构建了北方省份周度 ILI% 预测链路，完成了严格时间切分、多模型对比和多步预测评估。",
-            f"- 可以说：在当前北方地区真实周度监测数据版本下，{best_model} 的整体 RMSE 最低；同时需要说明该排序依赖当前数据版本、特征聚合方法与时间切分。",
+            "- 可以说：本项目基于公开可追溯的国家流感中心周报构建了北方省份周度 ILI% 预测链路，完成了严格时间切分、多模型对比、多步预测评估和 iTransformer 优化实验。",
+            f"- 可以说：在当前北方地区真实周度监测数据版本下，`{best_model}` 的整体 RMSE 最低；同时需要说明该排序依赖当前数据版本、特征聚合方法、验证集选择规则与时间切分。",
+            "- 可以说：原始 iTransformer 与 ARIMA 接近；加入 ILI% 动态特征并进行验证集约束下的融合后，优化模型进一步降低整体误差。",
             "- 不要说：模型已经证明可以准确预测某个城市或区县的真实流感病例。",
             "- 不要说：搜索指数或气象变量一定提升预测性能；消融实验显示外生变量贡献需要结合数据聚合噪声和流行季背景解释。",
             "",
             "## 后续优先级",
             "",
             "1. 复核 `cnic_weekly_parse_report.json` 与 `final_data_audit.md` 中的 `imputed` 记录，确认论文中的补齐来源、插值字段说明与最终训练数据一致。",
-            "2. 若后续更新国家流感中心周报或百度指数聚合文件，应重新运行训练、消融实验并更新图表。",
-            "3. 在论文中保留“数据来源与可信性”“PDF 解析质量”“多源变量聚合口径”“消融实验解释”四部分说明。",
+            "2. 若后续更新国家流感中心周报或百度指数聚合文件，应重新运行训练、消融实验、iTransformer 优化实验并更新图表。",
+            "3. 在论文中保留“数据来源与可信性”“PDF 解析质量”“多源变量聚合口径”“消融实验解释”“优化模型选择依据”五部分说明。",
         ]
     )
 

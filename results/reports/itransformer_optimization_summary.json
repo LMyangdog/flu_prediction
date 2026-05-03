@@ -1,0 +1,835 @@
+{
+  "purpose": "iTransformer 调参和 ARIMA 残差混合优化实验。",
+  "selection_note": "候选配置保留验证集最佳权重；测试集指标用于最终横向比较，不应用于继续手工挑参。",
+  "main_experiment_baselines": {
+    "iTransformer": {
+      "RMSE": 0.9943245053291321,
+      "MAE": 0.5916123390197754,
+      "MAPE": 13.038329780101776,
+      "R2": 0.4338081479072571,
+      "peak_hit_rate": 0.3,
+      "peak_value_error": 2.356917381286621
+    },
+    "LSTM": {
+      "RMSE": 1.6015342473983765,
+      "MAE": 0.989047110080719,
+      "MAPE": 20.31244784593582,
+      "R2": -0.4688577651977539,
+      "peak_hit_rate": 0.0,
+      "peak_value_error": 5.998976230621338
+    },
+    "DLinear": {
+      "RMSE": 1.3047208786010742,
+      "MAE": 0.8143250942230225,
+      "MAPE": 17.52687394618988,
+      "R2": 0.025139331817626953,
+      "peak_hit_rate": 0.0,
+      "peak_value_error": 4.540538787841797
+    },
+    "ARIMA": {
+      "RMSE": 0.978256289654107,
+      "MAE": 0.5506034613899352,
+      "MAPE": 11.852397251520829,
+      "R2": 0.4519596021633637,
+      "peak_hit_rate": 0.375,
+      "peak_value_error": 0.6425662695674035
+    }
+  },
+  "results": [
+    {
+      "type": "itransformer_trial",
+      "name": "history_l16_baseline_capacity",
+      "label": "历史特征 L16 baseline",
+      "note": "复现消融实验中最强的历史特征方向，保留原始 iTransformer 容量。",
+      "lookback": 16,
+      "feature_count": 13,
+      "feature_cols": [
+        "ili_rate",
+        "week_sin",
+        "week_cos",
+        "month_sin",
+        "month_cos",
+        "is_flu_season",
+        "ili_rate_lag1",
+        "ili_rate_lag2",
+        "ili_rate_lag4",
+        "ili_rate_roll_mean_4",
+        "ili_rate_roll_std_4",
+        "ili_rate_roll_mean_8",
+        "ili_rate_roll_std_8"
+      ],
+      "model_config": {
+        "d_model": 128,
+        "n_heads": 8,
+        "n_layers": 2,
+        "d_ff": 256,
+        "dropout": 0.1,
+        "activation": "gelu"
+      },
+      "training_config": {
+        "epochs": 180,
+        "patience": 24,
+        "optimizer": "adam",
+        "learning_rate": 0.001,
+        "weight_decay": 0.01,
+        "scheduler": "cosine",
+        "batch_size": 32,
+        "loss": null,
+        "peak_threshold": null,
+        "peak_weight": null,
+        "trend_weight": null
+      },
+      "best_epoch": 19,
+      "best_val_loss": 0.049897860968485475,
+      "validation_metrics": {
+        "RMSE": 1.5267807245254517,
+        "MAE": 0.9626266956329346,
+        "MAPE": 29.854866862297058,
+        "R2": 0.2032892107963562,
+        "peak_hit_rate": 0.023809523809523808,
+        "peak_value_error": 2.374544620513916
+      },
+      "metrics": {
+        "RMSE": 0.9793961048126221,
+        "MAE": 0.6023964881896973,
+        "MAPE": 13.57804536819458,
+        "R2": 0.4506816864013672,
+        "peak_hit_rate": 0.35,
+        "peak_value_error": 2.653017997741699
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.7133687138557434,
+        "H1_MAE": 0.4877026379108429,
+        "H1_MAPE": 11.683066189289093,
+        "H2_RMSE": 0.8859215974807739,
+        "H2_MAE": 0.5513743758201599,
+        "H2_MAPE": 12.426767498254776,
+        "H3_RMSE": 1.0450093746185303,
+        "H3_MAE": 0.641553521156311,
+        "H3_MAPE": 14.23022598028183,
+        "H4_RMSE": 1.2046037912368774,
+        "H4_MAE": 0.7289556860923767,
+        "H4_MAPE": 15.972119569778442
+      }
+    },
+    {
+      "type": "itransformer_trial",
+      "name": "history_l24_baseline_capacity",
+      "label": "历史特征 L24 baseline",
+      "note": "在原始容量下扩大上下文，验证半年历史是否优于 16 周窗口。",
+      "lookback": 24,
+      "feature_count": 13,
+      "feature_cols": [
+        "ili_rate",
+        "week_sin",
+        "week_cos",
+        "month_sin",
+        "month_cos",
+        "is_flu_season",
+        "ili_rate_lag1",
+        "ili_rate_lag2",
+        "ili_rate_lag4",
+        "ili_rate_roll_mean_4",
+        "ili_rate_roll_std_4",
+        "ili_rate_roll_mean_8",
+        "ili_rate_roll_std_8"
+      ],
+      "model_config": {
+        "d_model": 128,
+        "n_heads": 8,
+        "n_layers": 2,
+        "d_ff": 256,
+        "dropout": 0.1,
+        "activation": "gelu"
+      },
+      "training_config": {
+        "epochs": 180,
+        "patience": 24,
+        "optimizer": "adam",
+        "learning_rate": 0.001,
+        "weight_decay": 0.01,
+        "scheduler": "cosine",
+        "batch_size": 32,
+        "loss": null,
+        "peak_threshold": null,
+        "peak_weight": null,
+        "trend_weight": null
+      },
+      "best_epoch": 48,
+      "best_val_loss": 0.04602743793899814,
+      "validation_metrics": {
+        "RMSE": 1.484412431716919,
+        "MAE": 0.8962733149528503,
+        "MAPE": 24.690885841846466,
+        "R2": 0.2872358560562134,
+        "peak_hit_rate": 0.0,
+        "peak_value_error": 3.9290823936462402
+      },
+      "metrics": {
+        "RMSE": 1.1161284446716309,
+        "MAE": 0.6077378392219543,
+        "MAPE": 12.21878007054329,
+        "R2": 0.34329402446746826,
+        "peak_hit_rate": 0.0,
+        "peak_value_error": 4.3344407081604
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.9938568472862244,
+        "H1_MAE": 0.5397273898124695,
+        "H1_MAPE": 10.931814461946487,
+        "H2_RMSE": 1.0547406673431396,
+        "H2_MAE": 0.5823912024497986,
+        "H2_MAPE": 11.856987327337265,
+        "H3_RMSE": 1.1476023197174072,
+        "H3_MAE": 0.6322675347328186,
+        "H3_MAPE": 12.6880943775177,
+        "H4_RMSE": 1.2512991428375244,
+        "H4_MAE": 0.676565408706665,
+        "H4_MAPE": 13.398221135139465
+      }
+    },
+    {
+      "type": "itransformer_trial",
+      "name": "history_dynamic_l16_baseline",
+      "label": "历史动态 L16 baseline",
+      "note": "在历史特征基础上显式加入差分、加速度和相对滚动均值。",
+      "lookback": 16,
+      "feature_count": 18,
+      "feature_cols": [
+        "ili_rate",
+        "week_sin",
+        "week_cos",
+        "month_sin",
+        "month_cos",
+        "is_flu_season",
+        "ili_rate_lag1",
+        "ili_rate_lag2",
+        "ili_rate_lag4",
+        "ili_rate_roll_mean_4",
+        "ili_rate_roll_std_4",
+        "ili_rate_roll_mean_8",
+        "ili_rate_roll_std_8",
+        "ili_rate_diff1",
+        "ili_rate_pct_change",
+        "ili_rate_acceleration",
+        "ili_rate_slope_4",
+        "ili_rate_above_roll_mean_8"
+      ],
+      "model_config": {
+        "d_model": 128,
+        "n_heads": 8,
+        "n_layers": 2,
+        "d_ff": 256,
+        "dropout": 0.1,
+        "activation": "gelu"
+      },
+      "training_config": {
+        "epochs": 180,
+        "patience": 24,
+        "optimizer": "adam",
+        "learning_rate": 0.001,
+        "weight_decay": 0.01,
+        "scheduler": "cosine",
+        "batch_size": 32,
+        "loss": null,
+        "peak_threshold": null,
+        "peak_weight": null,
+        "trend_weight": null
+      },
+      "best_epoch": 15,
+      "best_val_loss": 0.048723234329372644,
+      "validation_metrics": {
+        "RMSE": 1.5191978216171265,
+        "MAE": 0.9949183464050293,
+        "MAPE": 31.829890608787537,
+        "R2": 0.21118342876434326,
+        "peak_hit_rate": 0.11904761904761904,
+        "peak_value_error": 2.1514673233032227
+      },
+      "metrics": {
+        "RMSE": 0.9753652215003967,
+        "MAE": 0.5925824642181396,
+        "MAPE": 13.401608169078827,
+        "R2": 0.45519405603408813,
+        "peak_hit_rate": 0.325,
+        "peak_value_error": 2.159346103668213
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.6968917846679688,
+        "H1_MAE": 0.431026428937912,
+        "H1_MAPE": 9.633023291826248,
+        "H2_RMSE": 0.9007144570350647,
+        "H2_MAE": 0.5617319941520691,
+        "H2_MAPE": 12.726204097270966,
+        "H3_RMSE": 1.0646343231201172,
+        "H3_MAE": 0.6364090442657471,
+        "H3_MAPE": 14.113904535770416,
+        "H4_RMSE": 1.17258620262146,
+        "H4_MAE": 0.7411625385284424,
+        "H4_MAPE": 17.133304476737976
+      }
+    },
+    {
+      "type": "itransformer_trial",
+      "name": "history_dynamic_l16_mild_peak",
+      "label": "历史动态 L16 温和峰值加权",
+      "note": "使用动态特征，并采用较弱峰值权重，尽量降低 RMSE 损失。",
+      "lookback": 16,
+      "feature_count": 18,
+      "feature_cols": [
+        "ili_rate",
+        "week_sin",
+        "week_cos",
+        "month_sin",
+        "month_cos",
+        "is_flu_season",
+        "ili_rate_lag1",
+        "ili_rate_lag2",
+        "ili_rate_lag4",
+        "ili_rate_roll_mean_4",
+        "ili_rate_roll_std_4",
+        "ili_rate_roll_mean_8",
+        "ili_rate_roll_std_8",
+        "ili_rate_diff1",
+        "ili_rate_pct_change",
+        "ili_rate_acceleration",
+        "ili_rate_slope_4",
+        "ili_rate_above_roll_mean_8"
+      ],
+      "model_config": {
+        "d_model": 128,
+        "n_heads": 8,
+        "n_layers": 2,
+        "d_ff": 256,
+        "dropout": 0.1,
+        "activation": "gelu"
+      },
+      "training_config": {
+        "epochs": 180,
+        "patience": 24,
+        "optimizer": "adam",
+        "learning_rate": 0.001,
+        "weight_decay": 0.01,
+        "scheduler": "cosine",
+        "batch_size": 32,
+        "loss": "peak_weighted_mse",
+        "peak_threshold": 0.8,
+        "peak_weight": 0.5,
+        "trend_weight": null
+      },
+      "best_epoch": 15,
+      "best_val_loss": 0.06100173806771636,
+      "validation_metrics": {
+        "RMSE": 1.52949857711792,
+        "MAE": 1.0119651556015015,
+        "MAPE": 32.73073434829712,
+        "R2": 0.20045024156570435,
+        "peak_hit_rate": 0.11904761904761904,
+        "peak_value_error": 2.0682754516601562
+      },
+      "metrics": {
+        "RMSE": 0.9763109087944031,
+        "MAE": 0.6035676002502441,
+        "MAPE": 13.831399381160736,
+        "R2": 0.4541371464729309,
+        "peak_hit_rate": 0.35,
+        "peak_value_error": 2.042107105255127
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.6897520422935486,
+        "H1_MAE": 0.43671080470085144,
+        "H1_MAPE": 9.898563474416733,
+        "H2_RMSE": 0.9060872793197632,
+        "H2_MAE": 0.5756449103355408,
+        "H2_MAPE": 13.2441446185112,
+        "H3_RMSE": 1.0664622783660889,
+        "H3_MAE": 0.6380103826522827,
+        "H3_MAPE": 14.169949293136597,
+        "H4_RMSE": 1.1741540431976318,
+        "H4_MAE": 0.7639040350914001,
+        "H4_MAPE": 18.012946844100952
+      }
+    },
+    {
+      "type": "itransformer_trial",
+      "name": "history_dynamic_south_l16",
+      "label": "历史动态+南方信号 L16",
+      "note": "在北方历史动态特征基础上加入国家流感中心同周南方 ILI% 上下文。",
+      "lookback": 16,
+      "feature_count": 19,
+      "feature_cols": [
+        "ili_rate",
+        "southern_ili_rate",
+        "week_sin",
+        "week_cos",
+        "month_sin",
+        "month_cos",
+        "is_flu_season",
+        "ili_rate_lag1",
+        "ili_rate_lag2",
+        "ili_rate_lag4",
+        "ili_rate_roll_mean_4",
+        "ili_rate_roll_std_4",
+        "ili_rate_roll_mean_8",
+        "ili_rate_roll_std_8",
+        "ili_rate_diff1",
+        "ili_rate_pct_change",
+        "ili_rate_acceleration",
+        "ili_rate_slope_4",
+        "ili_rate_above_roll_mean_8"
+      ],
+      "model_config": {
+        "d_model": 128,
+        "n_heads": 8,
+        "n_layers": 2,
+        "d_ff": 256,
+        "dropout": 0.1,
+        "activation": "gelu"
+      },
+      "training_config": {
+        "epochs": 180,
+        "patience": 24,
+        "optimizer": "adam",
+        "learning_rate": 0.001,
+        "weight_decay": 0.01,
+        "scheduler": "cosine",
+        "batch_size": 32,
+        "loss": null,
+        "peak_threshold": null,
+        "peak_weight": null,
+        "trend_weight": null
+      },
+      "best_epoch": 17,
+      "best_val_loss": 0.049849315546453,
+      "validation_metrics": {
+        "RMSE": 1.5303317308425903,
+        "MAE": 1.0197948217391968,
+        "MAPE": 32.966721057891846,
+        "R2": 0.1995788812637329,
+        "peak_hit_rate": 0.09523809523809523,
+        "peak_value_error": 2.214505195617676
+      },
+      "metrics": {
+        "RMSE": 0.9777967929840088,
+        "MAE": 0.6032819151878357,
+        "MAPE": 13.693845272064209,
+        "R2": 0.4524742364883423,
+        "peak_hit_rate": 0.325,
+        "peak_value_error": 2.3653292655944824
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.7034800052642822,
+        "H1_MAE": 0.4677945077419281,
+        "H1_MAPE": 11.064770072698593,
+        "H2_RMSE": 0.8849379420280457,
+        "H2_MAE": 0.5643469095230103,
+        "H2_MAPE": 12.885858118534088,
+        "H3_RMSE": 1.0600850582122803,
+        "H3_MAE": 0.654666543006897,
+        "H3_MAPE": 14.731234312057495,
+        "H4_RMSE": 1.192713975906372,
+        "H4_MAE": 0.7263195514678955,
+        "H4_MAPE": 16.09351933002472
+      }
+    },
+    {
+      "type": "arima_residual_hybrid",
+      "name": "arima_residual_history_l24_baseline_capacity",
+      "label": "ARIMA + 残差 历史特征 L24 baseline",
+      "source_trial": "history_l24_baseline_capacity",
+      "lookback": 24,
+      "feature_count": 13,
+      "feature_cols": [
+        "ili_rate",
+        "week_sin",
+        "week_cos",
+        "month_sin",
+        "month_cos",
+        "is_flu_season",
+        "ili_rate_lag1",
+        "ili_rate_lag2",
+        "ili_rate_lag4",
+        "ili_rate_roll_mean_4",
+        "ili_rate_roll_std_4",
+        "ili_rate_roll_mean_8",
+        "ili_rate_roll_std_8"
+      ],
+      "best_epoch": 25,
+      "best_val_loss": 0.050608761220549546,
+      "metrics": {
+        "RMSE": 1.0057247794745912,
+        "MAE": 0.6018313232804401,
+        "MAPE": 13.358023166043864,
+        "R2": 0.4667867269849657,
+        "peak_hit_rate": 0.25,
+        "peak_value_error": 1.069403879275713
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.5760344592076886,
+        "H1_MAE": 0.3530982345440648,
+        "H1_MAPE": 8.378597325369782,
+        "H2_RMSE": 0.9123620419527494,
+        "H2_MAE": 0.5763007734880664,
+        "H2_MAPE": 12.840037116401886,
+        "H3_RMSE": 1.094283165970453,
+        "H3_MAE": 0.6843079959863035,
+        "H3_MAPE": 15.205255836715354,
+        "H4_RMSE": 1.2977879206864498,
+        "H4_MAE": 0.7936182891033257,
+        "H4_MAPE": 17.008202385688435
+      },
+      "arima_component_metrics": {
+        "RMSE": 1.0152620099704985,
+        "MAE": 0.57386511661494,
+        "MAPE": 12.253321398844394,
+        "R2": 0.45662591526756247,
+        "peak_hit_rate": 0.3,
+        "peak_value_error": 0.642565697362814
+      }
+    },
+    {
+      "type": "itransformer_trainval_refit",
+      "name": "trainval_refit_history_l24_baseline_capacity",
+      "label": "Train+Val 重训 历史特征 L24 baseline",
+      "source_trial": "history_l24_baseline_capacity",
+      "lookback": 24,
+      "feature_count": 13,
+      "feature_cols": [
+        "ili_rate",
+        "week_sin",
+        "week_cos",
+        "month_sin",
+        "month_cos",
+        "is_flu_season",
+        "ili_rate_lag1",
+        "ili_rate_lag2",
+        "ili_rate_lag4",
+        "ili_rate_roll_mean_4",
+        "ili_rate_roll_std_4",
+        "ili_rate_roll_mean_8",
+        "ili_rate_roll_std_8"
+      ],
+      "selected_epoch": 48,
+      "metrics": {
+        "RMSE": 1.0659148693084717,
+        "MAE": 0.6385492086410522,
+        "MAPE": 13.545216619968414,
+        "R2": 0.4010540246963501,
+        "peak_hit_rate": 0.0,
+        "peak_value_error": 3.7464141845703125
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.8995040059089661,
+        "H1_MAE": 0.5360829830169678,
+        "H1_MAPE": 11.356804519891739,
+        "H2_RMSE": 0.9998605251312256,
+        "H2_MAE": 0.6165134906768799,
+        "H2_MAPE": 13.259273767471313,
+        "H3_RMSE": 1.1058248281478882,
+        "H3_MAE": 0.671808123588562,
+        "H3_MAPE": 14.284177124500275,
+        "H4_RMSE": 1.2300487756729126,
+        "H4_MAE": 0.729792058467865,
+        "H4_MAPE": 15.280608832836151
+      }
+    },
+    {
+      "type": "validation_weighted_ensemble",
+      "name": "ensemble_history_l24_baseline_capacity",
+      "label": "验证集加权融合 历史特征 L24 baseline",
+      "source_trial": "history_l24_baseline_capacity",
+      "lookback": 24,
+      "feature_count": 13,
+      "alpha_arima": 0.26,
+      "alpha_itransformer": 0.74,
+      "best_val_rmse": 1.4642484633533028,
+      "metrics": {
+        "RMSE": 1.0571441347490973,
+        "MAE": 0.5769385309582451,
+        "MAPE": 11.740390544651802,
+        "R2": 0.41087010736453866,
+        "peak_hit_rate": 0.0,
+        "peak_value_error": 3.4058054655611576
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.834773057981277,
+        "H1_MAE": 0.46658986362151644,
+        "H1_MAPE": 9.680428914210095,
+        "H2_RMSE": 0.9771213885330388,
+        "H2_MAE": 0.5417620803267987,
+        "H2_MAPE": 11.192617904421553,
+        "H3_RMSE": 1.1226876012044955,
+        "H3_MAE": 0.6213883995145691,
+        "H3_MAPE": 12.584339354065625,
+        "H4_RMSE": 1.2482688694264625,
+        "H4_MAE": 0.678013780370096,
+        "H4_MAPE": 13.504176005909931
+      }
+    },
+    {
+      "type": "validation_calibrated_itransformer",
+      "name": "calibrated_history_l24_baseline_capacity",
+      "label": "验证集校准 历史特征 L24 baseline",
+      "source_trial": "history_l24_baseline_capacity",
+      "lookback": 24,
+      "feature_count": 13,
+      "calibration_params": [
+        {
+          "horizon": 1,
+          "slope": 1.6321218576542316,
+          "intercept": -1.7906617013237054
+        },
+        {
+          "horizon": 2,
+          "slope": 1.2982829683199444,
+          "intercept": -0.70255142998226
+        },
+        {
+          "horizon": 3,
+          "slope": 1.0412661183934437,
+          "intercept": 0.15777082656432567
+        },
+        {
+          "horizon": 4,
+          "slope": 0.8858407432085796,
+          "intercept": 0.6752285866810592
+        }
+      ],
+      "raw_source_metrics": {
+        "RMSE": 1.1161284446716309,
+        "MAE": 0.6077378392219543,
+        "MAPE": 12.21878007054329,
+        "R2": 0.34329402446746826,
+        "peak_hit_rate": 0.0,
+        "peak_value_error": 4.3344407081604
+      },
+      "metrics": {
+        "RMSE": 0.9861147999763489,
+        "MAE": 0.6134194135665894,
+        "MAPE": 13.964195549488068,
+        "R2": 0.4873775839805603,
+        "peak_hit_rate": 0.0,
+        "peak_value_error": 3.1126890182495117
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.735103964805603,
+        "H1_MAE": 0.4979800879955292,
+        "H1_MAPE": 11.931487917900085,
+        "H2_RMSE": 0.9004535675048828,
+        "H2_MAE": 0.5784572958946228,
+        "H2_MAPE": 13.327458500862122,
+        "H3_RMSE": 1.0627543926239014,
+        "H3_MAE": 0.6620309352874756,
+        "H3_MAPE": 14.857721328735352,
+        "H4_RMSE": 1.1870332956314087,
+        "H4_MAE": 0.7152094841003418,
+        "H4_MAPE": 15.740115940570831
+      }
+    },
+    {
+      "type": "arima_residual_hybrid",
+      "name": "arima_residual_history_dynamic_l16_baseline",
+      "label": "ARIMA + 残差 历史动态 L16 baseline",
+      "source_trial": "history_dynamic_l16_baseline",
+      "lookback": 16,
+      "feature_count": 18,
+      "feature_cols": [
+        "ili_rate",
+        "week_sin",
+        "week_cos",
+        "month_sin",
+        "month_cos",
+        "is_flu_season",
+        "ili_rate_lag1",
+        "ili_rate_lag2",
+        "ili_rate_lag4",
+        "ili_rate_roll_mean_4",
+        "ili_rate_roll_std_4",
+        "ili_rate_roll_mean_8",
+        "ili_rate_roll_std_8",
+        "ili_rate_diff1",
+        "ili_rate_pct_change",
+        "ili_rate_acceleration",
+        "ili_rate_slope_4",
+        "ili_rate_above_roll_mean_8"
+      ],
+      "best_epoch": 19,
+      "best_val_loss": 0.042116943979635835,
+      "metrics": {
+        "RMSE": 0.9670175093531932,
+        "MAE": 0.598539719297996,
+        "MAPE": 13.538261396955315,
+        "R2": 0.46447963130368475,
+        "peak_hit_rate": 0.35,
+        "peak_value_error": 0.9368310540227025
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.5633727006777931,
+        "H1_MAE": 0.3533573822949658,
+        "H1_MAPE": 8.364799272860655,
+        "H2_RMSE": 0.9107438585308733,
+        "H2_MAE": 0.6074481210955088,
+        "H2_MAPE": 13.833538631967416,
+        "H3_RMSE": 1.051988616849284,
+        "H3_MAE": 0.6665763345886441,
+        "H3_MAPE": 15.023580536368137,
+        "H4_RMSE": 1.2194130669635488,
+        "H4_MAE": 0.7667770392128651,
+        "H4_MAPE": 16.931127146625045
+      },
+      "arima_component_metrics": {
+        "RMSE": 0.9782562489588555,
+        "MAE": 0.5506034392170074,
+        "MAPE": 11.852397127285414,
+        "R2": 0.45195959305117117,
+        "peak_hit_rate": 0.375,
+        "peak_value_error": 0.642565697362814
+      }
+    },
+    {
+      "type": "itransformer_trainval_refit",
+      "name": "trainval_refit_history_dynamic_l16_baseline",
+      "label": "Train+Val 重训 历史动态 L16 baseline",
+      "source_trial": "history_dynamic_l16_baseline",
+      "lookback": 16,
+      "feature_count": 18,
+      "feature_cols": [
+        "ili_rate",
+        "week_sin",
+        "week_cos",
+        "month_sin",
+        "month_cos",
+        "is_flu_season",
+        "ili_rate_lag1",
+        "ili_rate_lag2",
+        "ili_rate_lag4",
+        "ili_rate_roll_mean_4",
+        "ili_rate_roll_std_4",
+        "ili_rate_roll_mean_8",
+        "ili_rate_roll_std_8",
+        "ili_rate_diff1",
+        "ili_rate_pct_change",
+        "ili_rate_acceleration",
+        "ili_rate_slope_4",
+        "ili_rate_above_roll_mean_8"
+      ],
+      "selected_epoch": 15,
+      "metrics": {
+        "RMSE": 0.9707314372062683,
+        "MAE": 0.6233977675437927,
+        "MAPE": 14.488954842090607,
+        "R2": 0.46035826206207275,
+        "peak_hit_rate": 0.375,
+        "peak_value_error": 1.9904365539550781
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.6475000977516174,
+        "H1_MAE": 0.43314018845558167,
+        "H1_MAPE": 10.096236318349838,
+        "H2_RMSE": 0.8763476014137268,
+        "H2_MAE": 0.6162139177322388,
+        "H2_MAPE": 14.988301694393158,
+        "H3_RMSE": 1.0499619245529175,
+        "H3_MAE": 0.6756580471992493,
+        "H3_MAPE": 15.597042441368103,
+        "H4_RMSE": 1.2163947820663452,
+        "H4_MAE": 0.7685791850090027,
+        "H4_MAPE": 17.274238169193268
+      }
+    },
+    {
+      "type": "validation_weighted_ensemble",
+      "name": "ensemble_history_dynamic_l16_baseline",
+      "label": "验证集加权融合 历史动态 L16 baseline",
+      "source_trial": "history_dynamic_l16_baseline",
+      "lookback": 16,
+      "feature_count": 18,
+      "alpha_arima": 0.34,
+      "alpha_itransformer": 0.6599999999999999,
+      "best_val_rmse": 1.5008957416834692,
+      "metrics": {
+        "RMSE": 0.9604054428081317,
+        "MAE": 0.563433415636636,
+        "MAPE": 12.469522705654727,
+        "R2": 0.4717779287724818,
+        "peak_hit_rate": 0.35,
+        "peak_value_error": 1.6436404317383664
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.6249962191747406,
+        "H1_MAE": 0.38759448050180595,
+        "H1_MAPE": 8.685852925067897,
+        "H2_RMSE": 0.872667744478116,
+        "H2_MAE": 0.5275301080031659,
+        "H2_MAPE": 11.72901022345861,
+        "H3_RMSE": 1.0646568976806472,
+        "H3_MAE": 0.6254202023775433,
+        "H3_MAPE": 13.615291400358979,
+        "H4_RMSE": 1.1848421339097084,
+        "H4_MAE": 0.7131888716640284,
+        "H4_MAPE": 15.84793627373342
+      },
+      "prediction_path": "results/reports\\test_predictions.csv"
+    },
+    {
+      "type": "validation_calibrated_itransformer",
+      "name": "calibrated_history_dynamic_l16_baseline",
+      "label": "验证集校准 历史动态 L16 baseline",
+      "source_trial": "history_dynamic_l16_baseline",
+      "lookback": 16,
+      "feature_count": 18,
+      "calibration_params": [
+        {
+          "horizon": 1,
+          "slope": 1.0465907411544593,
+          "intercept": -0.141384034175548
+        },
+        {
+          "horizon": 2,
+          "slope": 0.8067195290337605,
+          "intercept": 0.5545837113829896
+        },
+        {
+          "horizon": 3,
+          "slope": 0.620829064307209,
+          "intercept": 1.1783858565164853
+        },
+        {
+          "horizon": 4,
+          "slope": 0.5347731361376731,
+          "intercept": 1.4068576504437815
+        }
+      ],
+      "raw_source_metrics": {
+        "RMSE": 0.9753652215003967,
+        "MAE": 0.5925824642181396,
+        "MAPE": 13.401608169078827,
+        "R2": 0.45519405603408813,
+        "peak_hit_rate": 0.325,
+        "peak_value_error": 2.159346103668213
+      },
+      "metrics": {
+        "RMSE": 1.0403164625167847,
+        "MAE": 0.5855476260185242,
+        "MAPE": 12.48822957277298,
+        "R2": 0.380219042301178,
+        "peak_hit_rate": 0.225,
+        "peak_value_error": 1.9773602485656738
+      },
+      "horizon_metrics": {
+        "H1_RMSE": 0.6839359998703003,
+        "H1_MAE": 0.4329129159450531,
+        "H1_MAPE": 9.786954522132874,
+        "H2_RMSE": 0.9562080502510071,
+        "H2_MAE": 0.5561187267303467,
+        "H2_MAPE": 11.938906461000443,
+        "H3_RMSE": 1.1627885103225708,
+        "H3_MAE": 0.6479825377464294,
+        "H3_MAPE": 13.516858220100403,
+        "H4_RMSE": 1.2628754377365112,
+        "H4_MAE": 0.7051762342453003,
+        "H4_MAPE": 14.710202813148499
+      }
+    }
+  ]
+}

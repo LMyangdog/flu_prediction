@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 
 # Environments
+.conda/
 .venv/
 env/
 venv/
@@ -13,15 +14,16 @@ ENV/
 .ipynb_checkpoints
 
 # VS Code
+.idea/
 .vscode/
+.pytest_cache/
 
 # Project Specific - Large Files
 # 建议：大型数据集和模型权重通常不提交到 Git，或者使用 Git LFS
 data/raw/
 data/processed/
-data/splits/*.npy
-data/splits/*.csv
-checkpoints/*.pt
+data/splits/
+checkpoints/
 
 # Results
 results/logs/

@@ -32,6 +32,7 @@ class DataPreprocessor:
     def __init__(self, config: dict):
         self.config = config
         self.scalers: Dict[str, object] = {}
+        self.outlier_bounds: Dict[str, Tuple[float, float]] = {}
         self.feature_cols = []
         self.target_col = config.get('features', {}).get('target_col', 'ili_cases')
         self.split_metadata: Dict[str, object] = {}
@@ -42,7 +43,7 @@ class DataPreprocessor:
         完整预处理流水线
         
         处理流程：
-            选择特征 → 缺失值/异常值处理 → 时序全分割(防泄露) → 归一化(仅拟合Train) → 分别滑动窗口切片
+            选择特征 → 时序全分割(防泄露) → 缺失值/异常值处理(仅用Train拟合参数) → 归一化 → 分别滑动窗口切片
         """
         print("\n" + "=" * 60)
         print("数据预处理流水线 (严格无泄露版)")
@@ -56,15 +57,8 @@ class DataPreprocessor:
         # Step 1: 选择特征列
         df = self._select_features(df)
         print(f"[Step 1] 特征选择完成: {self.feature_cols}")
-        
-        # Step 2: 缺失值处理
-        df = self._handle_missing(df)
-        
-        # Step 3: 异常值处理
-        df = self._handle_outliers(df)
-        print(f"[Step 3] 异常值处理完成. 数据量: {len(df)}")
 
-        # Step 4: [修复] 物理隔离切分 DataFrame
+        # Step 2: 物理隔离切分 DataFrame，后续清洗参数只能来自训练集
         data_cfg = self.config.get('data', {})
         train_ratio = data_cfg.get('train_ratio', 0.7)
         val_ratio = data_cfg.get('val_ratio', 0.15)
@@ -77,8 +71,21 @@ class DataPreprocessor:
         df_val = df.iloc[train_end:val_end].copy()
         df_test = df.iloc[val_end:].copy()
 
+        # Step 3: 缺失值处理。Train 可内部插值；Val/Test 只使用历史前向填充和 Train 兜底值。
+        df_train, missing_fallbacks = self._handle_missing_train(df_train)
+        df_val = self._handle_missing_eval(df_val, previous_df=df_train, fallback_values=missing_fallbacks)
+        df_test = self._handle_missing_eval(df_test, previous_df=df_val, fallback_values=missing_fallbacks)
+        print("[Step 3] 缺失值处理完成")
+
+        # Step 4: 异常值处理。IQR 边界只在 Train 上拟合，再应用到其它集合。
+        self.outlier_bounds = self._fit_outlier_bounds(df_train)
+        df_train = self._apply_outlier_bounds(df_train, dataset_name="Train")
+        df_val = self._apply_outlier_bounds(df_val, dataset_name="Val")
+        df_test = self._apply_outlier_bounds(df_test, dataset_name="Test")
+        print(f"[Step 4] 异常值处理完成. 数据量: {len(df_train) + len(df_val) + len(df_test)}")
+
         self.split_metadata = {
-            'rows': int(n),
+            'rows': int(len(df_train) + len(df_val) + len(df_test)),
             'feature_count': int(len(self.feature_cols)),
             'train_rows': int(len(df_train)),
             'val_rows': int(len(df_val)),
@@ -100,7 +107,7 @@ class DataPreprocessor:
                 'end': str(pd.to_datetime(df_test['date']).max().date()),
             }
         
-        # Step 5: [修复] 归一化 (必须基于 df_train 拟合)
+        # Step 5: 归一化 (必须基于 df_train 拟合)
         data_train, data_val, data_test = self._strict_normalize(df_train, df_val, df_test)
 
         # Step 6: 独立滑动窗口切片 (彻底阻断边缘重叠泄露)
@@ -177,20 +184,82 @@ class DataPreprocessor:
 
         return df
     
-    def _handle_missing(self, df: pd.DataFrame) -> pd.DataFrame:
-        """缺失值处理"""
+    def _handle_missing_train(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, float]]:
+        """训练集缺失值处理，并生成验证/测试可复用的兜底值。"""
         df = df.copy()
+        fallback_values: Dict[str, float] = {}
         
         for col in self.feature_cols:
             if col in df.columns:
-                # 先用线性插值
                 df[col] = df[col].interpolate(method='linear', limit_direction='both')
-                # 再用前向/后向填充处理边界
                 df[col] = df[col].ffill().bfill()
+                fallback = df[col].median()
+                fallback_values[col] = 0.0 if pd.isna(fallback) else float(fallback)
         
-        # 删除仍有缺失的行
         df = df.dropna(subset=self.feature_cols).reset_index(drop=True)
+        return df, fallback_values
+
+    def _handle_missing_eval(
+        self,
+        df: pd.DataFrame,
+        previous_df: pd.DataFrame,
+        fallback_values: Dict[str, float],
+    ) -> pd.DataFrame:
+        """验证/测试集缺失值处理：只使用历史值前向填充，避免借用未来观测。"""
+        if df.empty:
+            return df.copy()
+
+        df = df.copy()
+        seed = previous_df.tail(1).copy() if previous_df is not None and not previous_df.empty else pd.DataFrame()
+        combined = pd.concat([seed, df], ignore_index=True)
+
+        for col in self.feature_cols:
+            if col in combined.columns:
+                combined[col] = combined[col].ffill()
+                combined[col] = combined[col].fillna(fallback_values.get(col, 0.0))
         
+        result = combined.iloc[len(seed):].copy().reset_index(drop=True)
+        return result.dropna(subset=self.feature_cols).reset_index(drop=True)
+
+    def _handle_missing(self, df: pd.DataFrame) -> pd.DataFrame:
+        """兼容旧调用：仅对传入片段内部处理缺失值。"""
+        handled, _ = self._handle_missing_train(df)
+        return handled
+
+    def _fit_outlier_bounds(self, df: pd.DataFrame, factor: float = 3.0) -> Dict[str, Tuple[float, float]]:
+        """只基于训练集拟合 IQR 裁剪边界。目标序列家族保留真实峰值，不做裁剪。"""
+        bounds: Dict[str, Tuple[float, float]] = {}
+
+        for col in self.feature_cols:
+            if col in df.columns and not self._is_target_family_feature(col):
+                Q1 = df[col].quantile(0.25)
+                Q3 = df[col].quantile(0.75)
+                IQR = Q3 - Q1
+                lower = float(Q1 - factor * IQR)
+                upper = float(Q3 + factor * IQR)
+                bounds[col] = (lower, upper)
+
+        return bounds
+
+    def _is_target_family_feature(self, col: str) -> bool:
+        """ILI% 监测列及其派生特征承载真实高峰信息，不按异常值裁剪。"""
+        return (
+            col == self.target_col
+            or col.startswith(f"{self.target_col}_")
+            or col.endswith("_ili_rate")
+        )
+
+    def _apply_outlier_bounds(self, df: pd.DataFrame, dataset_name: str = "Data") -> pd.DataFrame:
+        """应用训练集拟合出的异常值裁剪边界。"""
+        df = df.copy()
+
+        for col, (lower, upper) in self.outlier_bounds.items():
+            if col in df.columns:
+                n_outliers = int(((df[col] < lower) | (df[col] > upper)).sum())
+                if n_outliers > 0:
+                    df[col] = df[col].clip(lower, upper)
+                    print(f"  [异常值:{dataset_name}] {col}: 裁剪 {n_outliers} 个极端值")
+
         return df
     
     def _handle_outliers(self, df: pd.DataFrame, factor: float = 3.0) -> pd.DataFrame:
@@ -201,21 +270,8 @@ class DataPreprocessor:
         裁剪到边界值（Winsorize），而非直接删除行。
         """
         df = df.copy()
-        
-        for col in self.feature_cols:
-            if col in df.columns:
-                Q1 = df[col].quantile(0.25)
-                Q3 = df[col].quantile(0.75)
-                IQR = Q3 - Q1
-                lower = Q1 - factor * IQR
-                upper = Q3 + factor * IQR
-                
-                n_outliers = ((df[col] < lower) | (df[col] > upper)).sum()
-                if n_outliers > 0:
-                    df[col] = df[col].clip(lower, upper)
-                    print(f"  [异常值] {col}: 裁剪 {n_outliers} 个极端值")
-        
-        return df
+        self.outlier_bounds = self._fit_outlier_bounds(df, factor=factor)
+        return self._apply_outlier_bounds(df)
     
     def _normalize(self, df: pd.DataFrame) -> np.ndarray:
         """

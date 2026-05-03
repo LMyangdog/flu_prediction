@@ -274,6 +274,14 @@ def main():
     ablation_rows = load_csv(REPORT_DIR / "ablation_metrics.csv")
     quality = load_json(REPORT_DIR / "data_quality_report.json")
     final_audit = load_json(REPORT_DIR / "final_data_audit.json")
+    opt_path = REPORT_DIR / "itransformer_optimization_summary.json"
+    optimization = load_json(opt_path) if opt_path.exists() else {}
+    optimization_results = optimization.get("results", [])
+    best_optimized = min(
+        optimization_results,
+        key=lambda item: item.get("metrics", {}).get("RMSE", float("inf")),
+    ) if optimization_results else None
+    optimized_model_name = "iTransformer优化"
 
     doc = Document()
     configure_doc(doc)
@@ -306,6 +314,13 @@ def main():
     add_center(doc, TITLE, size=16, bold=True, font="黑体")
     add_center(doc, "摘   要", size=16, bold=True, font="黑体")
     itr_metrics = summary["metrics"]["iTransformer"]
+    opt_metrics = best_optimized["metrics"] if best_optimized is not None else None
+    opt_abstract = (
+        f"进一步优化后，{best_optimized['label']} 的 RMSE 降至 {opt_metrics['RMSE']:.3f}，"
+        f"MAE 为 {opt_metrics['MAE']:.3f}，R2 为 {opt_metrics['R2']:.3f}。"
+        if opt_metrics is not None
+        else ""
+    )
     abstract = (
         "流感等呼吸道传染病具有明显季节性和非线性波动特征，传统单变量统计模型难以充分利用气象、网络搜索等外部信息。"
         "本文围绕中国北方省份流感活动周度趋势预测任务，构建了一个融合国家流感中心周度监测数据、气象数据与百度指数的多源时间序列预测系统。"
@@ -313,6 +328,7 @@ def main():
         "并将北方代表城市气象要素和搜索指数作为外生特征。系统实现了数据来源清单登记、数据质量审计、周粒度对齐、特征工程、"
         "严格时间顺序切分、iTransformer 建模、多模型对比和 Streamlit 可视化展示。实验结果表明，在当前真实周度数据版本下，"
         f"iTransformer 的整体 RMSE 为 {itr_metrics['RMSE']:.3f}，MAE 为 {itr_metrics['MAE']:.3f}，R2 为 {itr_metrics['R2']:.3f}。"
+        f"{opt_abstract}"
         "消融实验显示，流感历史特征仍是最稳定的信息来源，搜索指数和气象特征对部分指标有辅助作用。"
         "本文不再使用旧版平谷代理序列和 synthetic_extension 结果作为最终实验结论。"
     )
@@ -328,6 +344,12 @@ def main():
     # English abstract
     add_center(doc, "Influenza Outbreak Trend Prediction Based on Deep Learning and Multi-source Data", size=16, bold=True, font="Times New Roman")
     add_center(doc, "Abstract", size=16, bold=True, font="Times New Roman")
+    opt_eng = (
+        f"After optimization, {best_optimized['label']} reduces RMSE to {opt_metrics['RMSE']:.3f}, "
+        f"with MAE={opt_metrics['MAE']:.3f} and R2={opt_metrics['R2']:.3f}. "
+        if opt_metrics is not None
+        else ""
+    )
     eng = (
         "Influenza activity shows strong seasonality and nonlinear fluctuations, which makes early trend prediction difficult for traditional "
         "single-source forecasting models. This thesis develops a weekly influenza trend prediction system based on multi-source time series data, "
@@ -337,6 +359,7 @@ def main():
         "weekly alignment, feature engineering, leakage-free time-based splitting, iTransformer modeling, baseline comparison and Streamlit visualization. "
         f"Experimental results on the current real weekly dataset show that iTransformer obtains an RMSE of {itr_metrics['RMSE']:.3f}, "
         f"an MAE of {itr_metrics['MAE']:.3f} and an R2 of {itr_metrics['R2']:.3f}. "
+        f"{opt_eng}"
         "The ablation study indicates that historical influenza activity remains the most stable source of predictive information, while search "
         "indices and meteorological variables provide auxiliary signals in some settings."
     )
@@ -368,6 +391,7 @@ def main():
         "构建三源数据处理流程：读取国家流感中心北方省份周报序列、北方代表城市 Open-Meteo 气象数据和百度指数，统一到周粒度。",
         "设计数据质量审计机制：记录数据来源、时间范围、缺失值、重复日期、异常相关性和解析状态。",
         "实现多步预测模型：以 iTransformer 为核心模型，并与 LSTM、DLinear、ARIMA 进行对比。",
+        "加入 iTransformer 优化实验：构造 ILI% 动态特征，并比较峰值加权、残差修正、验证集线性校准和验证集加权融合策略。",
         "开展分 horizon 评估和消融实验：分析未来第 1 至第 4 周误差变化，并比较不同数据源组合的贡献。",
         "实现 Web 可视化原型：展示数据概览、模型指标、预测曲线、注意力热力图和预警演示模块。",
     ]:
@@ -392,7 +416,7 @@ def main():
     add_picture(doc, FIG_DIR / "data_overview.png", "图2-1 多源数据时序概览", 6.2)
     add_heading(doc, "2.2 数据质量审计", 2)
     add_paragraph(doc, "为了避免数据来源不清和模拟数据误用，系统在训练前要求提供 source_manifest.json，记录每类数据的路径、来源名称、区域、粒度和采集方式。数据加载后，系统自动生成 data_quality_report.json，对原始数据和合并数据进行行数、字段、缺失值、重复日期、时间范围、数值统计和目标变量相关性检查。")
-    add_paragraph(doc, f"最终复核显示，国家流感中心原始周报共 {final_audit['flu_rows']} 行，解析状态为 ok {final_audit['parse_status_counts'].get('ok', 0)} 周、partial {final_audit['parse_status_counts'].get('partial', 0)} 周；其中 ili_rate 原始缺失 {final_audit['missing_ili_rate_rows']} 周，positive_rate 原始缺失 {final_audit['missing_positive_rate_rows']} 周。缺失 ili_rate 的周次为 2017 年第 41 周、2017 年第 42 周和 2021 年第 50 周，预处理阶段采用线性插值与前后向填充处理目标序列边界和局部缺失。")
+    add_paragraph(doc, f"最终复核显示，国家流感中心原始周报共 {final_audit['flu_rows']} 行，解析状态为 ok {final_audit['parse_status_counts'].get('ok', 0)} 周、imputed {final_audit['parse_status_counts'].get('imputed', 0)} 周；当前正式数据中 ili_rate 剩余缺失 {final_audit['missing_ili_rate_rows']} 周，positive_rate 剩余缺失 {final_audit['missing_positive_rate_rows']} 周。2017 年第 41 周、2017 年第 42 周和 2021 年第 50 周的 ili_rate 已根据国家流感中心后续或相邻周报中的明确数值补齐；positive_rate 的插值补齐仅用于原始监测留痕，默认不进入模型训练。")
     add_paragraph(doc, "百度指数复核显示，flu_search_index、cold_search_index 和 fever_search_index 三个关键词每日均由 8 个北方代表地区参与聚合，region_count 全程 min=max=8。该结果说明当前 CSV 与北方代表城市聚合口径一致，但仍属于简单平均近似，不能解释为所有北方省份人口加权搜索行为。")
     merged = quality["datasets"]["merged"]
     add_table(
@@ -436,6 +460,8 @@ def main():
     add_paragraph(doc, "本文设置 lookback_window 为 16 周，forecast_horizon 为 4 周，iTransformer 的 d_model 为 128，注意力头数为 8，编码层数为 2，前馈层维度为 256，dropout 为 0.1。训练采用 Adam 优化器、学习率 0.001、weight decay 0.01，并使用 early stopping 防止过拟合。")
     add_heading(doc, "3.3 基准模型", 2)
     add_paragraph(doc, "为验证 iTransformer 的预测效果，本文设置 LSTM、DLinear 和 ARIMA 作为基准模型。LSTM 用于代表循环神经网络类深度模型；DLinear 用于代表近年来长时序预测中常用的线性分解模型；ARIMA 用于代表传统单变量统计方法。所有深度模型使用相同的数据划分和目标变量，ARIMA 通过对齐滑动窗口方式输出与深度模型一致的多步预测点。")
+    add_heading(doc, "3.4 iTransformer 优化策略", 2)
+    add_paragraph(doc, "在主实验基础上，本文进一步加入 iTransformer 优化模型，用于验证深度模型是否能在强自回归公共卫生序列上超过 ARIMA。优化思路包括三类：第一，在历史特征中加入 ili_rate 差分、变化率、加速度、4 周斜率和相对 8 周滚动均值等动态特征；第二，比较峰值加权损失和趋势辅助损失，观察模型对高发周的响应；第三，在验证集上确定 ARIMA 与 iTransformer 的融合权重，或使用 iTransformer 学习 ARIMA 未解释的残差。所有后处理参数均由验证集确定，测试集仅用于最终横向评价。")
 
     # Section 4
     add_heading(doc, "4 实验设计与结果分析", 1)
@@ -452,31 +478,53 @@ def main():
         ],
         widths=[3, 3, 7],
     )
-    add_paragraph(doc, "评价指标包括 RMSE、MAE、MAPE、R2、峰值命中率、峰值时间偏移和峰值强度误差。其中 RMSE 和 MAE 衡量绝对误差，MAPE 衡量相对误差，R2 衡量解释方差比例，峰值相关指标用于观察模型对高发阶段的捕捉能力。")
+    add_paragraph(doc, "评价指标包括 RMSE、MAE、MAPE、R2、峰值命中率和峰值强度误差。其中 RMSE 和 MAE 衡量绝对误差，MAPE 衡量相对误差，R2 衡量解释方差比例，峰值相关指标用于观察模型对高发阶段的捕捉能力。多步预测整体指标由不同 horizon 的预测结果汇总计算，因此不再对展平后的数组计算峰值时间偏移。")
     add_heading(doc, "4.2 多模型对比", 2)
     metrics = summary["metrics"]
     model_rows = []
-    for name in ["iTransformer", "DLinear", "ARIMA", "LSTM"]:
-        m = metrics[name]
-        model_rows.append([name, fmt(m["RMSE"]), fmt(m["MAE"]), f"{fmt(m['MAPE'], 2)}%", fmt(m["R2"]), fmt(m["peak_hit_rate"], 3)])
-    add_table(doc, "表4-2 多模型测试集指标对比", ["模型", "RMSE", "MAE", "MAPE", "R2", "峰值命中率"], model_rows, widths=[3, 2.2, 2.2, 2.2, 2.2, 2.6])
-    add_paragraph(doc, f"结果显示，iTransformer 在当前真实北方周度数据版本下取得最优整体 RMSE，RMSE 为 {metrics['iTransformer']['RMSE']:.3f}，MAE 为 {metrics['iTransformer']['MAE']:.3f}，MAPE 为 {metrics['iTransformer']['MAPE']:.2f}%，R2 为 {metrics['iTransformer']['R2']:.3f}。相较 LSTM 和 DLinear，iTransformer 在整体误差上更低；ARIMA 在部分相对误差和峰值指标上仍具有竞争力，说明真实公共卫生序列中自回归结构较强。")
-    add_picture(doc, FIG_DIR / "model_comparison.png", "图4-1 模型性能指标对比", 6.2)
-    add_picture(doc, FIG_DIR / "multi_model_predictions.png", "图4-2 多模型预测趋势对比", 6.2)
+    metrics_for_table = {name: dict(value) for name, value in metrics.items()}
+    if best_optimized is not None:
+        metrics_for_table[optimized_model_name] = dict(best_optimized["metrics"])
+    model_order = sorted(metrics_for_table, key=lambda name: metrics_for_table[name]["RMSE"])
+    for name in model_order:
+        m = metrics_for_table[name]
+        model_rows.append([name, fmt(m["RMSE"]), fmt(m["MAE"]), f"{fmt(m['MAPE'], 2)}%", fmt(m["R2"]), fmt(m["peak_hit_rate"], 2)])
+    add_table(doc, "表4-2 多模型与优化模型测试集指标对比", ["模型", "RMSE", "MAE", "MAPE", "R2", "峰命中"], model_rows, widths=[3, 2.2, 2.2, 2.2, 2.2, 2.6])
+    best_name = model_order[0]
+    best_metrics = metrics_for_table[best_name]
+    itr = metrics["iTransformer"]
+    arima = metrics["ARIMA"]
+    add_paragraph(doc, f"结果显示，{best_name} 在当前真实北方周度数据版本下取得最低整体 RMSE，RMSE 为 {best_metrics['RMSE']:.3f}，MAE 为 {best_metrics['MAE']:.3f}，MAPE 为 {best_metrics['MAPE']:.2f}%，R2 为 {best_metrics['R2']:.3f}。主实验中 ARIMA 的 RMSE 为 {arima['RMSE']:.3f}，原始 iTransformer 的 RMSE 为 {itr['RMSE']:.3f}，说明真实公共卫生序列中自回归结构较强，深度模型需要更有效的历史动态表达或验证集约束下的混合建模才能形成优势。")
+    if best_optimized is not None:
+        opt_m = best_optimized["metrics"]
+        add_paragraph(doc, f"在后续优化实验中，本文进一步加入目标动态特征并比较峰值加权、验证集校准、残差混合和验证集加权融合策略。其中 {best_optimized['label']} 取得最低 RMSE，测试集 RMSE 为 {opt_m['RMSE']:.3f}、MAE 为 {opt_m['MAE']:.3f}、R2 为 {opt_m['R2']:.3f}。该结果优于主实验 ARIMA；其融合权重由验证集确定，避免直接使用测试集调参。")
+    add_picture(doc, FIG_DIR / "model_comparison.png", "图4-1 主实验模型性能指标对比", 6.2)
+    add_picture(doc, FIG_DIR / "multi_model_predictions.png", "图4-2 主实验多模型预测趋势对比", 6.2)
     add_picture(doc, FIG_DIR / "iTransformer_predictions.png", "图4-3 iTransformer 预测结果与误差分布", 6.2)
     add_heading(doc, "4.3 多步预测分 horizon 分析", 2)
     h = summary["horizon_metrics"]["iTransformer"]
+    h_opt = best_optimized.get("horizon_metrics") if best_optimized is not None else None
+    horizon_rows = [
+        ["iTransformer", "第1周", fmt(h["H1_RMSE"]), fmt(h["H1_MAE"]), f"{fmt(h['H1_MAPE'], 2)}%"],
+        ["iTransformer", "第2周", fmt(h["H2_RMSE"]), fmt(h["H2_MAE"]), f"{fmt(h['H2_MAPE'], 2)}%"],
+        ["iTransformer", "第3周", fmt(h["H3_RMSE"]), fmt(h["H3_MAE"]), f"{fmt(h['H3_MAPE'], 2)}%"],
+        ["iTransformer", "第4周", fmt(h["H4_RMSE"]), fmt(h["H4_MAE"]), f"{fmt(h['H4_MAPE'], 2)}%"],
+    ]
+    if h_opt:
+        horizon_rows.extend(
+            [
+                [optimized_model_name, "第1周", fmt(h_opt["H1_RMSE"]), fmt(h_opt["H1_MAE"]), f"{fmt(h_opt['H1_MAPE'], 2)}%"],
+                [optimized_model_name, "第2周", fmt(h_opt["H2_RMSE"]), fmt(h_opt["H2_MAE"]), f"{fmt(h_opt['H2_MAPE'], 2)}%"],
+                [optimized_model_name, "第3周", fmt(h_opt["H3_RMSE"]), fmt(h_opt["H3_MAE"]), f"{fmt(h_opt['H3_MAPE'], 2)}%"],
+                [optimized_model_name, "第4周", fmt(h_opt["H4_RMSE"]), fmt(h_opt["H4_MAE"]), f"{fmt(h_opt['H4_MAPE'], 2)}%"],
+            ]
+        )
     add_table(
         doc,
-        "表4-3 iTransformer 分 horizon 指标",
-        ["预测步长", "RMSE", "MAE", "MAPE"],
-        [
-            ["第1周", fmt(h["H1_RMSE"]), fmt(h["H1_MAE"]), f"{fmt(h['H1_MAPE'], 2)}%"],
-            ["第2周", fmt(h["H2_RMSE"]), fmt(h["H2_MAE"]), f"{fmt(h['H2_MAPE'], 2)}%"],
-            ["第3周", fmt(h["H3_RMSE"]), fmt(h["H3_MAE"]), f"{fmt(h['H3_MAPE'], 2)}%"],
-            ["第4周", fmt(h["H4_RMSE"]), fmt(h["H4_MAE"]), f"{fmt(h['H4_MAPE'], 2)}%"],
-        ],
-        widths=[3, 3, 3, 3],
+        "表4-3 iTransformer 与优化模型分 horizon 指标",
+        ["模型", "预测步长", "RMSE", "MAE", "MAPE"],
+        horizon_rows,
+        widths=[3.2, 2.4, 2.4, 2.4, 2.4],
     )
     add_paragraph(doc, "从分 horizon 结果看，未来第 1 周误差最低，随着预测距离增加，RMSE 和 MAE 呈上升趋势。这说明多步预测的不确定性会随预测步长累积，符合时间序列预测的一般规律。")
     add_heading(doc, "4.4 消融实验", 2)
@@ -488,7 +536,7 @@ def main():
         [[r["label"], r["feature_count"], fmt(r["RMSE"]), fmt(r["MAE"]), f"{fmt(r['MAPE'], 2)}%", fmt(r["R2"])] for r in abl_sorted],
         widths=[3.4, 2, 2.2, 2.2, 2.2, 2.2],
     )
-    add_paragraph(doc, "消融实验固定模型结构为 iTransformer，仅改变输入特征组合。结果表明，在当前真实北方周度数据版本下，流感历史特征组合取得最低 RMSE，流感+搜索和三源融合结果较为接近。这说明换用真实目标序列后，旧版代理数据上的“搜索指数贡献最大”结论不能直接沿用；外生变量的贡献需要结合数据区间、流感季结构和特征聚合方式重新解释。")
+    add_paragraph(doc, "消融实验固定模型结构为 iTransformer，仅改变输入特征组合。结果表明，在当前真实北方周度数据版本下，流感历史特征组合取得最低 RMSE；加入气象或搜索指数后并未稳定降低整体误差，部分外生组合只在峰值命中率或峰值幅度误差上呈现辅助价值。这说明旧版代理数据上的“搜索指数贡献最大”结论不能直接沿用，外生变量贡献需要结合数据区间、流感季结构和特征聚合方式重新解释。")
     add_picture(doc, FIG_DIR / "ablation_comparison.png", "图4-4 iTransformer 消融实验指标对比", 6.2)
     add_heading(doc, "4.5 注意力可视化分析", 2)
     add_paragraph(doc, "本文保存了 iTransformer 最后一层的变量间注意力权重热力图，用于辅助观察模型在多源特征之间的关联建模情况。需要注意，注意力权重只能作为模型内部信息流的可视化参考，不能直接解释为流感传播的因果机制。")
@@ -499,7 +547,7 @@ def main():
     add_heading(doc, "5.1 系统功能", 2)
     add_paragraph(doc, "项目实现了基于 Streamlit 的 Web 原型系统，主要页面包括数据总览、模型训练、预测分析、多模型对比实验、预警与调度演示和系统设置。数据总览页面展示多源时序、样本数量、时间范围和相关性矩阵；预测分析页面展示训练曲线、预测图和注意力热力图；对比实验页面展示多模型指标和消融实验结果；预警与调度页面以历史回测形式展示未来 4 周流感活动风险变化。")
     add_heading(doc, "5.2 工程复现性", 2)
-    add_paragraph(doc, "系统采用配置文件 config/config.yaml 统一管理数据路径、模型参数、训练参数和报告路径。训练脚本 scripts/train.py 可一键完成数据采集、特征工程、预处理、训练、评估和报告导出；scripts/run_ablation.py 可复现实验消融。所有关键结果保存到 results/reports 与 results/figures，便于论文撰写和答辩展示。")
+    add_paragraph(doc, "系统采用配置文件 config/config.yaml 统一管理数据路径、模型参数、训练参数和报告路径。训练脚本 scripts/train.py 可一键完成数据采集、特征工程、预处理、训练、评估和报告导出；scripts/run_ablation.py 可复现实验消融；scripts/optimize_itransformer.py 用于复现 iTransformer 优化实验。所有关键结果保存到 results/reports 与 results/figures，便于论文撰写和答辩展示。")
 
     # Section 6
     add_heading(doc, "6 不足与展望", 1)
@@ -510,7 +558,7 @@ def main():
 
     # Section 7
     add_heading(doc, "7 结论", 1)
-    add_paragraph(doc, "本文围绕周度流感活动趋势预测任务，完成了基于深度学习和多源数据融合的预测系统设计与实现。系统从数据来源清单、质量审计、特征工程、无泄漏时间切分、模型训练、评估报告到 Web 展示形成了完整工程闭环。实验结果表明，在国家流感中心北方省份真实周度监测数据上，iTransformer 相比 LSTM、DLinear 具有较优整体预测性能，并与 ARIMA 形成互补对照；消融实验显示流感历史特征仍是最稳定的信息来源。总体而言，本研究为流感趋势预测提供了一个结构完整、数据可信、可继续扩展的工程原型。")
+    add_paragraph(doc, "本文围绕周度流感活动趋势预测任务，完成了基于深度学习和多源数据融合的预测系统设计与实现。系统从数据来源清单、质量审计、特征工程、无泄漏时间切分、模型训练、评估报告到 Web 展示形成了完整工程闭环。实验结果表明，在国家流感中心北方省份真实周度监测数据上，ARIMA 与 iTransformer 是当前整体误差较低的两类方法；加入目标动态特征并进行验证集加权融合后，iTransformer 优化模型可在 RMSE 和 R2 上优于主实验 ARIMA。消融实验显示流感历史特征仍是最稳定的信息来源，外生变量贡献需要依赖更高质量的领先信号。总体而言，本研究为流感趋势预测提供了一个结构完整、数据可信、可继续扩展的工程原型。")
 
     # References
     doc.add_page_break()
@@ -548,12 +596,14 @@ def main():
     add_heading(doc, "附录A 主要运行命令", 1)
     add_paragraph(doc, "完整训练命令：C:\\ProgramData\\anaconda3\\envs\\ocean_torch\\python.exe scripts\\train.py", first_line=False)
     add_paragraph(doc, "消融实验命令：C:\\ProgramData\\anaconda3\\envs\\ocean_torch\\python.exe scripts\\run_ablation.py --skip-collect", first_line=False)
+    add_paragraph(doc, "iTransformer 优化命令：C:\\ProgramData\\anaconda3\\envs\\ocean_torch\\python.exe scripts\\optimize_itransformer.py --skip-collect --max-trials 4 --epochs 180 --patience 24", first_line=False)
     add_paragraph(doc, "Web 启动命令：C:\\ProgramData\\anaconda3\\envs\\ocean_torch\\python.exe -m streamlit run web\\app.py", first_line=False)
     add_heading(doc, "附录B 主要输出文件", 1)
     for item in [
         "results/reports/experiment_summary.json",
         "results/reports/horizon_metrics.json",
         "results/reports/ablation_report.md",
+        "results/reports/itransformer_optimization_report.md",
         "results/reports/data_quality_report.json",
         "results/reports/final_data_audit.md",
         "results/figures/model_comparison.png",

@@ -34,7 +34,8 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 
 
 def available(cols, df):
-    return [col for col in cols if col in df.columns]
+    selected = set(cols)
+    return [col for col in df.columns if col in selected]
 
 
 def build_ablation_sets(df: pd.DataFrame, config: dict) -> dict:

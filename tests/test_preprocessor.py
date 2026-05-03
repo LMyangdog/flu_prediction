@@ -62,3 +62,14 @@ def test_preprocessor_interpolates_missing_target_before_sequence_creation(tmp_p
 
     assert not np.isnan(X_train).any()
     assert not np.isnan(y_train).any()
+
+
+def test_preprocessor_fits_outlier_bounds_from_train_only(tmp_path):
+    df = make_weekly_frame()
+    df.loc[len(df) - 1, "temperature"] = 1_000_000.0
+    preprocessor = DataPreprocessor(make_config(tmp_path))
+
+    preprocessor.process(df)
+
+    lower, upper = preprocessor.outlier_bounds["temperature"]
+    assert lower < upper < 100.0

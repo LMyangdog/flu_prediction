@@ -1,0 +1,224 @@
+[跳过] 使用已有数据
+[优化实验] 已附加 CNIC 跨区域上下文特征: ['southern_ili_rate']
+
+============================================================
+Step 2: 特征工程
+============================================================
+
+[特征工程] 开始构建衍生特征...
+  [时间特征] 添加 5 个: week_sin/cos, month_sin/cos, is_flu_season
+  [滞后特征] 添加 3 个: ['ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4']
+  [滚动特征] 添加 4 个: 窗口大小 [4, 8]
+  [目标动态] 添加 5 个
+  [交叉特征] 添加 3 个
+  [搜索衍生] 添加 6 个
+[特征工程] 完成！新增特征后删除 4 行 NaN
+[特征工程] 最终特征数: 39, 样本数: 793
+[优化实验] 跳过基础候选训练，仅补跑后处理: history_dynamic_l16_baseline
+
+============================================================
+ARIMA 残差混合实验: 历史动态 L16 baseline (history_dynamic_l16_baseline)
+============================================================
+[Seed] random_seed=42
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8', 'ili_rate_diff1', 'ili_rate_pct_change', 'ili_rate_acceleration', 'ili_rate_slope_4', 'ili_rate_above_roll_mean_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 536 samples
+  - Val:   100 samples
+  - Test:  100 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\arima_residual_history_dynamic_l16_baseline/
+
+[DataLoader] 创建完成:
+  Train: 536 samples, 17 batches
+  Val:   100 samples, 4 batches
+  Test:  100 samples, 4 batches
+  变量数: 18, 回看窗口: 16, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 301,444
+iTransformer(
+  num_variables=18,
+  lookback=16,
+  horizon=4,
+  d_model=128,
+  params=301,444
+)
+[Trainer] 使用 CPU
+
+============================================================
+开始训练: iTransformerResidual_history_dynamic_l16_baseline
+============================================================
+Epochs: 180, 设备: cpu
+Loss: mse
+Epoch    1/180 | Train Loss: 0.309303 | Val Loss: 0.071371 | LR: 1.00e-03 | Time: 1s
+Epoch   10/180 | Train Loss: 0.008014 | Val Loss: 0.044531 | LR: 9.94e-04 | Time: 5s
+  [EarlyStopping] 5/24 (最佳 epoch: 13)
+Epoch   20/180 | Train Loss: 0.006731 | Val Loss: 0.042222 | LR: 9.73e-04 | Time: 10s
+  [EarlyStopping] 5/24 (最佳 epoch: 19)
+  [EarlyStopping] 10/24 (最佳 epoch: 19)
+Epoch   30/180 | Train Loss: 0.006397 | Val Loss: 0.044057 | LR: 9.37e-04 | Time: 15s
+  [EarlyStopping] 15/24 (最佳 epoch: 19)
+  [EarlyStopping] 20/24 (最佳 epoch: 19)
+Epoch   40/180 | Train Loss: 0.006268 | Val Loss: 0.043461 | LR: 8.89e-04 | Time: 21s
+
+[Early Stopping] 在 Epoch 43 停止训练
+  最佳验证损失: 0.042117 (Epoch 19)
+
+训练完成！总时间: 22.1s
+最佳验证损失: 0.042117
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerResidual_history_dynamic_l16_baseline_best.pt (Epoch 19)
+
+[ARIMA + iTransformer Residual] 测试集评估结果:
+  RMSE: 0.9670
+  MAE: 0.5985
+  MAPE: 13.5383
+  R2: 0.4645
+  peak_hit_rate: 0.3500
+  peak_value_error: 0.9368
+
+============================================================
+Train+Val 固定轮数重训: 历史动态 L16 baseline (history_dynamic_l16_baseline)
+============================================================
+[Seed] random_seed=42
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8', 'ili_rate_diff1', 'ili_rate_pct_change', 'ili_rate_acceleration', 'ili_rate_slope_4', 'ili_rate_above_roll_mean_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 536 samples
+  - Val:   100 samples
+  - Test:  100 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\trainval_refit_history_dynamic_l16_baseline/
+
+[iTransformer] 模型构建完成
+  参数量: 301,444
+iTransformer(
+  num_variables=18,
+  lookback=16,
+  horizon=4,
+  d_model=128,
+  params=301,444
+)
+[Trainer] 使用 CPU
+
+============================================================
+固定轮数训练: iTransformerTrainVal_history_dynamic_l16_baseline
+============================================================
+Epochs: 15, 设备: cpu
+Loss: mse
+Epoch    1/15 | Train Loss: 0.335310 | LR: 1.00e-03 | Time: 1s
+Epoch   10/15 | Train Loss: 0.015709 | LR: 9.94e-04 | Time: 6s
+Epoch   15/15 | Train Loss: 0.013210 | LR: 9.85e-04 | Time: 9s
+
+固定轮数训练完成！总时间: 8.8s
+最终训练损失: 0.013210
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerTrainVal_history_dynamic_l16_baseline_best.pt (Epoch 15)
+
+[iTransformerTrainVal_history_dynamic_l16_baseline] 测试集评估结果:
+  RMSE: 0.9707
+  MAE: 0.6234
+  MAPE: 14.4890
+  R2: 0.4604
+  peak_hit_rate: 0.3750
+  peak_value_error: 1.9904
+
+============================================================
+验证集加权融合: 历史动态 L16 baseline (history_dynamic_l16_baseline)
+============================================================
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8', 'ili_rate_diff1', 'ili_rate_pct_change', 'ili_rate_acceleration', 'ili_rate_slope_4', 'ili_rate_above_roll_mean_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 536 samples
+  - Val:   100 samples
+  - Test:  100 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\history_dynamic_l16_baseline/
+
+[DataLoader] 创建完成:
+  Train: 536 samples, 17 batches
+  Val:   100 samples, 4 batches
+  Test:  100 samples, 4 batches
+  变量数: 18, 回看窗口: 16, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 301,444
+iTransformer(
+  num_variables=18,
+  lookback=16,
+  horizon=4,
+  d_model=128,
+  params=301,444
+)
+[Trainer] 使用 CPU
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerOpt_history_dynamic_l16_baseline_best.pt (Epoch 15)
+
+[ARIMA + iTransformer Validation Ensemble] 测试集评估结果:
+  alpha_arima: 0.34 (val_RMSE=1.5009)
+  RMSE: 0.9604
+  MAE: 0.5634
+  MAPE: 12.4695
+  R2: 0.4718
+  peak_hit_rate: 0.3500
+  peak_value_error: 1.6436
+
+============================================================
+验证集线性校准: 历史动态 L16 baseline (history_dynamic_l16_baseline)
+============================================================
+
+============================================================
+数据预处理流水线 (严格无泄露版)
+============================================================
+[Step 1] 特征选择完成: ['ili_rate', 'week_sin', 'week_cos', 'month_sin', 'month_cos', 'is_flu_season', 'ili_rate_lag1', 'ili_rate_lag2', 'ili_rate_lag4', 'ili_rate_roll_mean_4', 'ili_rate_roll_std_4', 'ili_rate_roll_mean_8', 'ili_rate_roll_std_8', 'ili_rate_diff1', 'ili_rate_pct_change', 'ili_rate_acceleration', 'ili_rate_slope_4', 'ili_rate_above_roll_mean_8']
+[Step 3] 缺失值处理完成
+[Step 4] 异常值处理完成. 数据量: 793
+[Step 6] 严格切分完成:
+  - Train: 536 samples
+  - Val:   100 samples
+  - Test:  100 samples
+
+[保存] 预处理数据已保存至 data\splits\optimization\history_dynamic_l16_baseline/
+
+[DataLoader] 创建完成:
+  Train: 536 samples, 17 batches
+  Val:   100 samples, 4 batches
+  Test:  100 samples, 4 batches
+  变量数: 18, 回看窗口: 16, 预测步长: 4
+
+[iTransformer] 模型构建完成
+  参数量: 301,444
+iTransformer(
+  num_variables=18,
+  lookback=16,
+  horizon=4,
+  d_model=128,
+  params=301,444
+)
+[Trainer] 使用 CPU
+[Trainer] 加载检查点: checkpoints\optimization\iTransformerOpt_history_dynamic_l16_baseline_best.pt (Epoch 15)
+
+[iTransformer Validation Calibration] 测试集评估结果:
+  RMSE: 1.0403
+  MAE: 0.5855
+  MAPE: 12.4882
+  R2: 0.3802
+  peak_hit_rate: 0.2250
+  peak_value_error: 1.9774
+
+优化实验报告已保存:
+  - results/reports\itransformer_optimization_summary.json
+  - results/reports\itransformer_optimization_report.md

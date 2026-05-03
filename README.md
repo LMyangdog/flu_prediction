@@ -26,7 +26,7 @@
 
 ### 特征工程与训练方法
 
-模型输入由 29 个特征组成，主要包括四类信息：流感历史序列、气象变量、百度搜索指数和时间序列衍生特征。衍生特征包括周/月周期编码、流感季标记、`ili_rate` 的 1 周、2 周、4 周滞后值，4 周和 8 周滚动均值/标准差，以及气象交互项和搜索指数变化率/加速度等。模型使用过去 16 周数据作为输入窗口，预测未来 4 周 `ili_rate`，适合展示“提前预警”和“趋势复盘”的毕业设计目标。
+默认三源建模输入由 34 个数值特征组成，主要包括四类信息：流感历史序列、气象变量、百度搜索指数和时间序列衍生特征。衍生特征包括周/月周期编码、流感季标记、`ili_rate` 的 1 周、2 周、4 周滞后值，4 周和 8 周滚动均值/标准差，`ili_rate` 差分、变化率、加速度、4 周斜率、相对 8 周均值，以及气象交互项和搜索指数变化率/加速度等。模型使用过去 16 周数据作为输入窗口，预测未来 4 周 `ili_rate`，适合展示“提前预警”和“趋势复盘”的毕业设计目标。
 
 训练阶段采用严格时间顺序切分，避免未来信息泄漏：
 
@@ -40,7 +40,7 @@
 
 ### 实验结果与展示方式
 
-最终测试集上，iTransformer 的整体结果为 RMSE 0.772、MAE 0.491、MAPE 11.51%、R2 0.538，在当前数据版本下优于 LSTM、DLinear，并与 ARIMA 形成清晰对照。项目还完成了特征消融实验，用于解释“仅流感历史”“流感+气象”“流感+搜索”“三源融合”四种输入组合的差异。Web 页面位于 `web/app.py`，面向答辩展示提供数据概览、模型指标、预测曲线、预警复盘和论文结论支撑，便于导师快速理解项目的数据来源、建模方法和实验可信度。
+整改后的主实验测试集上，ARIMA 的整体 RMSE 最低（RMSE 0.978、MAE 0.551、MAPE 11.85%、R2 0.452），原始 iTransformer 与其接近（RMSE 0.994、MAE 0.592、MAPE 13.04%、R2 0.434），并明显优于 LSTM、DLinear。进一步优化实验显示，加入 `ili_rate` 动态特征后的历史动态 L16 iTransformer 可达到 RMSE 0.975、R2 0.455，略优于主实验 ARIMA；在此基础上，用验证集确定 ARIMA 与动态 iTransformer 的加权融合比例后，测试 RMSE 进一步降至 0.960、R2 提升至 0.472。ARIMA + iTransformer 残差模型也达到 RMSE 0.967，并将峰值强度误差从动态单模型的 2.159 降至 0.937。该结果说明当前真实北方周度 ILI% 序列具有较强自回归结构，深度模型若要超过传统统计基线，需要利用更有效的历史动态表达，或与 ARIMA 这类强自回归基线进行验证集约束下的混合建模。项目还完成了特征消融实验，用于解释“仅流感历史”“流感+气象”“流感+搜索”“三源融合”四种输入组合的差异。Web 页面位于 `web/app.py`，面向答辩展示提供数据概览、模型指标、预测曲线、预警复盘和论文结论支撑，便于导师快速理解项目的数据来源、建模方法和实验可信度。
 
 中国海洋大学信息科学与工程学部计算机科学与技术本科毕业设计项目。
 
@@ -125,13 +125,25 @@ python scripts/train.py --skip-collect
 python scripts/run_ablation.py --skip-collect
 ```
 
+运行 iTransformer 优化实验（历史动态特征 + ARIMA 残差/融合 + Web 预测明细同步）：
+
+```bash
+python scripts/optimize_itransformer.py --skip-collect --max-trials 6 --epochs 180 --patience 24
+```
+
+如果基础候选已经训练完成，只需要把当前最优 `历史动态 L16 baseline` 的验证集融合结果同步到报告和 Web 页面：
+
+```bash
+python scripts/optimize_itransformer.py --skip-collect --postprocess-trial history_dynamic_l16_baseline --skip-residual --skip-refit --skip-calibration
+```
+
 ## 当前收尾检查
 
 1. `scripts/fetch_flu_cn_weekly.py` 已生成北方省份周度流感序列；`scripts/patch_flu_missing_values.py` 已对剩余缺失做可追溯补齐，需在论文中说明 `cnic_weekly_parse_report.json` 与 `final_data_audit.md` 记录的 `imputed` 来源。
 2. `north_baidu_index.csv` 已切换为北方代表城市聚合序列；若更新城市范围或聚合方式，应同步更新 `source_manifest.json` 与论文数据来源表。
-3. 每次更新原始数据后，重新运行 `python scripts/train.py --skip-collect` 和 `python scripts/run_ablation.py --skip-collect`，并用新产物覆盖论文图表与指标表。
+3. 每次更新原始数据后，重新运行 `python scripts/train.py --skip-collect`、`python scripts/run_ablation.py --skip-collect` 和 `python scripts/optimize_itransformer.py --skip-collect`，并用新产物覆盖论文图表与指标表。
 4. 运行 `python scripts/audit_final_data.py` 生成最终数据复核说明，用于答辩和论文数据质量章节。
-5. 最终论文与 Web 展示均应使用“国家流感中心北方省份周度流感监测数据”口径，不再使用旧平谷代理与 synthetic_extension 结论。
+5. 最终论文与 Web 展示均应使用“国家流感中心北方省份周度流感监测数据”口径，并把 `iTransformer优化` 作为补充优化模型口径；不再使用旧平谷代理与 synthetic_extension 结论。
 
 ## 数据补齐与最终状态
 

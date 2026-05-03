@@ -98,8 +98,12 @@ class Trainer:
         # 学习率调度器
         self.scheduler = self._build_scheduler(train_cfg)
         
-        # 损失函数
+        # 损失函数配置。默认保持普通 MSE；优化实验可启用峰值加权/趋势辅助。
+        self.loss_name = train_cfg.get('loss', 'mse').lower()
         self.criterion = nn.MSELoss()
+        self.peak_threshold = float(train_cfg.get('peak_threshold', 0.7))
+        self.peak_weight = float(train_cfg.get('peak_weight', 2.0))
+        self.trend_weight = float(train_cfg.get('trend_weight', 0.0))
         
         # 早停
         self.early_stopping = EarlyStopping(
@@ -168,6 +172,7 @@ class Trainer:
         print(f"开始训练: {self.model_name}")
         print(f"{'=' * 60}")
         print(f"Epochs: {self.epochs}, 设备: {self.device}")
+        print(f"Loss: {self.loss_name}")
         
         best_val_loss = float('inf')
         start_time = time.time()
@@ -222,6 +227,56 @@ class Trainer:
         self._save_history()
         
         return self.history
+
+    def train_fixed_epochs(self, train_loader: DataLoader, epochs: Optional[int] = None) -> Dict:
+        """
+        Train for a fixed number of epochs without a validation loader.
+
+        This is useful after hyperparameters/epoch count have already been
+        selected on the validation split and the final model should consume
+        both train and validation samples before the held-out test evaluation.
+        """
+        run_epochs = int(epochs or self.epochs)
+        print(f"\n{'=' * 60}")
+        print(f"固定轮数训练: {self.model_name}")
+        print(f"{'=' * 60}")
+        print(f"Epochs: {run_epochs}, 设备: {self.device}")
+        print(f"Loss: {self.loss_name}")
+
+        self.history = {
+            'train_loss': [],
+            'val_loss': [],
+            'lr': [],
+        }
+        start_time = time.time()
+        final_loss = float('inf')
+
+        for epoch in range(1, run_epochs + 1):
+            train_loss = self._train_epoch(train_loader)
+            final_loss = train_loss
+            current_lr = self.optimizer.param_groups[0]['lr']
+            self.history['train_loss'].append(train_loss)
+            self.history['lr'].append(current_lr)
+
+            if isinstance(self.scheduler, ReduceLROnPlateau):
+                self.scheduler.step(train_loss)
+            else:
+                self.scheduler.step()
+
+            if epoch % 10 == 0 or epoch == 1 or epoch == run_epochs:
+                elapsed = time.time() - start_time
+                print(f"Epoch {epoch:4d}/{run_epochs} | "
+                      f"Train Loss: {train_loss:.6f} | "
+                      f"LR: {current_lr:.2e} | "
+                      f"Time: {elapsed:.0f}s")
+
+        self._save_checkpoint(run_epochs, final_loss, is_best=True)
+        self._save_history()
+
+        total_time = time.time() - start_time
+        print(f"\n固定轮数训练完成！总时间: {total_time:.1f}s")
+        print(f"最终训练损失: {final_loss:.6f}")
+        return self.history
     
     def _train_epoch(self, train_loader: DataLoader) -> float:
         """单个 epoch 训练"""
@@ -236,7 +291,7 @@ class Trainer:
             self.optimizer.zero_grad()
             
             predictions = self.model(batch_x)
-            loss = self.criterion(predictions, batch_y)
+            loss = self._compute_loss(predictions, batch_y)
             
             loss.backward()
             
@@ -263,12 +318,30 @@ class Trainer:
                 batch_y = batch_y.to(self.device)
                 
                 predictions = self.model(batch_x)
-                loss = self.criterion(predictions, batch_y)
+                loss = self._compute_loss(predictions, batch_y)
                 
                 total_loss += loss.item()
                 n_batches += 1
         
         return total_loss / max(n_batches, 1)
+
+    def _compute_loss(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """Compute configurable training loss."""
+        if self.loss_name in {'peak_weighted_mse', 'peak_trend_mse'}:
+            weights = torch.ones_like(targets)
+            peak_mask = targets >= self.peak_threshold
+            weights = weights + peak_mask.float() * self.peak_weight
+            loss = (weights * (predictions - targets) ** 2).mean()
+        else:
+            loss = self.criterion(predictions, targets)
+
+        if self.loss_name in {'trend_mse', 'peak_trend_mse'} and targets.shape[1] > 1:
+            pred_delta = predictions[:, 1:] - predictions[:, :-1]
+            target_delta = targets[:, 1:] - targets[:, :-1]
+            trend_loss = torch.mean((pred_delta - target_delta) ** 2)
+            loss = loss + self.trend_weight * trend_loss
+
+        return loss
     
     def evaluate(self, test_loader: DataLoader, scaler=None) -> Tuple[Dict, np.ndarray, np.ndarray, Dict]:
         """
@@ -317,7 +390,7 @@ class Trainer:
         actuals_flat = actuals_2d.flatten()
 
         # 计算指标
-        metrics = compute_all_metrics(actuals_flat, predictions_flat)
+        metrics = compute_all_metrics(actuals_flat, predictions_flat, include_peak_time_offset=False)
         horizon_metrics = compute_horizon_metrics(actuals_2d, predictions_2d)
         
         print(f"\n[{self.model_name}] 测试集评估结果:")

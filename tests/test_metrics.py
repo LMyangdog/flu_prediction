@@ -18,6 +18,17 @@ def test_compute_all_metrics_includes_peak_metrics():
     assert {"RMSE", "MAE", "MAPE", "R2", "peak_hit_rate", "peak_time_offset", "peak_value_error"} <= set(metrics)
 
 
+def test_compute_all_metrics_can_skip_peak_time_offset_for_flattened_multistep_outputs():
+    metrics = compute_all_metrics(
+        np.array([1.0, 5.0, 2.0]),
+        np.array([1.0, 4.5, 3.0]),
+        include_peak_time_offset=False,
+    )
+
+    assert "peak_time_offset" not in metrics
+    assert {"peak_hit_rate", "peak_value_error"} <= set(metrics)
+
+
 def test_compute_horizon_metrics_returns_one_group_per_step():
     y_true = np.array([[1.0, 2.0], [3.0, 4.0]])
     y_pred = np.array([[1.0, 1.0], [5.0, 4.0]])

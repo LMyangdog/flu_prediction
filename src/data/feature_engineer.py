@@ -5,8 +5,9 @@
     1. 时间特征：周数编码、月份编码、季节标志
     2. 滞后特征：ILI 的 1/2/4 周滞后
     3. 滚动统计：滚动均值、标准差
-    4. 交叉特征：温度×湿度交互
-    5. 搜索衍生：环比变化率
+    4. 目标动态特征：差分、加速度、相对滚动均值
+    5. 交叉特征：温度×湿度交互
+    6. 搜索衍生：环比变化率
 
 Author: flu_prediction project
 """
@@ -50,10 +51,13 @@ class FeatureEngineer:
         # 3. 滚动统计特征
         df = self._add_rolling_features(df)
         
-        # 4. 交叉特征
+        # 4. 目标序列动态特征
+        df = self._add_target_dynamics(df)
+        
+        # 5. 交叉特征
         df = self._add_cross_features(df)
         
-        # 5. 搜索指数衍生特征
+        # 6. 搜索指数衍生特征
         df = self._add_search_derivatives(df)
         
         # 删除因滞后/滚动产生的 NaN 行
@@ -129,6 +133,39 @@ class FeatureEngineer:
                 count += 2
         
         print(f"  [滚动特征] 添加 {count} 个: 窗口大小 {windows}")
+        return df
+
+    def _add_target_dynamics(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        目标动态特征 — 显式描述短期上升/回落形态。
+
+        这些特征只使用当前及历史周的目标值；在滑动窗口中作为已观测上下文输入，
+        不引用任何预测 horizon 内的未来目标。
+        """
+        target = self.config.get('features', {}).get('target_col', 'ili_cases')
+        if target not in df.columns:
+            print("  [目标动态] 添加 0 个")
+            return df
+
+        df[f'{target}_diff1'] = df[target].diff().fillna(0)
+        df[f'{target}_pct_change'] = (
+            df[target].pct_change()
+            .replace([np.inf, -np.inf], 0)
+            .fillna(0)
+            .clip(-5, 5)
+        )
+        df[f'{target}_acceleration'] = df[f'{target}_diff1'].diff().fillna(0)
+        df[f'{target}_slope_4'] = (df[target] - df[target].shift(3)) / 3
+        df[f'{target}_slope_4'] = df[f'{target}_slope_4'].fillna(df[f'{target}_diff1'])
+
+        roll_mean_8 = df.get(f'{target}_roll_mean_8')
+        if roll_mean_8 is not None:
+            df[f'{target}_above_roll_mean_8'] = df[target] - roll_mean_8
+            count = 5
+        else:
+            count = 4
+
+        print(f"  [目标动态] 添加 {count} 个")
         return df
     
     def _add_cross_features(self, df: pd.DataFrame) -> pd.DataFrame:
